@@ -21,11 +21,11 @@ const NotificationsPanel: React.FC<{
     return (
          <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
             <div className="p-4 font-bold border-b">Notificações</div>
-            <div className="max-h-96 overflow-y-auto">
+            <div className="max-h-96 overflow-y-auto no-scrollbar">
                 {notifications.length > 0 ? (
                     notifications.map(n => (
                         <div key={n.id} className={`p-4 border-b text-sm ${n.type === 'warning' ? 'bg-red-50' : 'bg-white'} hover:bg-gray-50`}>
-                            <p className="text-gray-700">{n.message}</p>
+                            <p className="text-gray-700 font-medium">{n.message}</p>
                             <p className="text-xs text-gray-400 mt-1">{formatDate(n.createdAt)}</p>
                         </div>
                     ))
@@ -83,27 +83,22 @@ const Header: React.FC = () => {
     setIsLoggingOut(true);
     try {
       await logout();
-      // On success, the component will unmount, so no need to reset state.
     } catch (error) {
       console.error("Erro logout:", error);
-      // If logout fails, reset the button state so the user can try again.
       setIsLoggingOut(false);
     }
   };
 
 
   return (
-    <header className="bg-white shadow-md">
-      <div className="container mx-auto px-4 sm:px-6 md:px-8 py-4 flex justify-between items-center">
+    <header className="bg-white shadow-md border-b border-gray-100">
+      <div className="container mx-auto px-4 sm:px-6 md:px-8 py-3 flex justify-between items-center">
         <div className="flex items-center space-x-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-800">Territórios</h1>
+            <img src="map-icon.svg" alt="Logo" className="w-10 h-10 drop-shadow-sm" />
+            <h1 className="text-xl md:text-2xl font-black text-blue-900 tracking-tight">territorio</h1>
         </div>
-        <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-600 hidden lg:block">{user?.name}</span>
+        <div className="flex items-center space-x-2 md:space-x-4">
+            <span className="text-sm text-gray-600 hidden lg:block font-bold">{user?.name}</span>
             
             <div className="relative" ref={notificationRef}>
                 <button onClick={() => setShowNotifications(s => !s)} className="relative p-2 rounded-full hover:bg-gray-100 transition-colors">
@@ -120,7 +115,7 @@ const Header: React.FC = () => {
             <button
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="bg-red-50 text-red-600 hover:bg-red-100 font-bold py-2 px-4 rounded-lg transition-all transform active:scale-95 disabled:opacity-50"
+                className="bg-red-50 text-red-600 hover:bg-red-100 font-black py-2 px-4 rounded-xl transition-all transform active:scale-95 disabled:opacity-50 text-sm"
             >
                 {isLoggingOut ? '...' : 'Sair'}
             </button>
