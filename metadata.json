@@ -1,0 +1,5 @@
+{
+  "name": "Gerenciador de Territórios da Congregação",
+  "description": "Um sistema completo para gerenciar territórios de congregação, incluindo solicitação, atribuição, controle de prazo e relatórios. Construído com React e Firebase para uma experiência moderna e responsiva.",
+  "requestFramePermissions": []
+}
