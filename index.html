@@ -1,17 +1,20 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#2563eb">
+    
+    <!-- Apple PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Territórios">
+    <link rel="apple-touch-icon" href="/map-icon.svg">
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="/map-icon.svg" />
-    <link rel="apple-touch-icon" href="/map-icon.svg">
     
     <title>Gerenciador de Territórios</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -41,6 +44,12 @@
   .no-scrollbar {
       -ms-overflow-style: none;
       scrollbar-width: none;
+  }
+  
+  /* Melhora a experiência de "app" prevenindo seleção de texto em botões */
+  button {
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
 </style>
 </head>

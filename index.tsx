@@ -5,6 +5,19 @@ import App from './App';
 
 console.log("App Territórios: Inicializando...");
 
+// Registro do Service Worker para PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('SW registrado com sucesso:', registration.scope);
+      })
+      .catch(error => {
+        console.log('Falha ao registrar o SW:', error);
+      });
+  });
+}
+
 // Componente simples para capturar erros críticos e evitar tela branca
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
   constructor(props: any) {
