@@ -1,374 +1,260 @@
 
-import { supabase } from '../supabase/client';
 import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, Notification, TerritoryHistory } from '../types';
-import { GoogleGenAI } from "@google/genai";
-import { AuthResponse } from '@supabase/supabase-js';
 
-// --- AUTH FUNCTIONS ---
-
-export const apiLogin = async (email: string, pass: string): Promise<void> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-    if (error) throw new Error(error.message);
+// --- DATABASE SIMULATION ---
+const STORAGE_KEYS = {
+    TERRITORIES: 'territory_db_maps',
+    REQUESTS: 'territory_db_requests',
+    USERS: 'territory_db_users',
+    CURRENT_USER: 'territory_current_session'
 };
 
-export const apiSignUp = async (name: string, email: string, pass: string): Promise<AuthResponse['data']> => {
-    const { data: signUpData, error: authError } = await supabase.auth.signUp({ 
-        email, 
-        password: pass,
-        options: {
-            data: {
-                name: name
-            }
-        }
-    });
+const getLocal = (key: string) => {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : null;
+};
 
-    if (authError) throw new Error(authError.message);
-    if (!signUpData.user) throw new Error("Cadastro falhou, usuário não criado.");
+const setLocal = (key: string, data: any) => {
+    localStorage.setItem(key, JSON.stringify(data));
+};
+
+// Initial Data Seed
+const seedDatabase = () => {
+    if (!getLocal(STORAGE_KEYS.TERRITORIES)) {
+        const initialTerritories: Territory[] = [
+            {
+                id: '1',
+                name: 'Território 01 - Centro',
+                status: TerritoryStatus.AVAILABLE,
+                pdfUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+                createdAt: new Date(),
+                history: [],
+                permanentNotes: 'Área comercial movimentada.'
+            },
+            {
+                id: '2',
+                name: 'Território 02 - Vila Real',
+                status: TerritoryStatus.AVAILABLE,
+                pdfUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+                createdAt: new Date(),
+                history: [],
+                permanentNotes: 'Muitos prédios com interfone.'
+            }
+        ];
+        setLocal(STORAGE_KEYS.TERRITORIES, initialTerritories);
+    }
     
-    return signUpData;
-};
+    if (!getLocal(STORAGE_KEYS.USERS)) {
+        setLocal(STORAGE_KEYS.USERS, [
+            { id: 'admin-id', name: 'Administrador Local', email: 'admin@teste.com', role: 'admin' }
+        ]);
+    }
 
-export const apiLogout = async (): Promise<void> => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw new Error(error.message);
-};
-
-// --- USER MANAGEMENT ---
-
-export const fetchAllUsers = async (): Promise<User[]> => {
-    const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('name', { ascending: true });
-
-    if (error) throw new Error(error.message);
-    return data.map(u => ({
-        id: u.auth_id,
-        name: u.name,
-        email: u.email,
-        role: u.role
-    }));
-};
-
-export const updateUserRole = async (userId: string, newRole: 'admin' | 'publicador'): Promise<void> => {
-    const { error } = await supabase
-        .from('users')
-        .update({ role: newRole })
-        .eq('auth_id', userId);
-
-    if (error) throw new Error(error.message);
-};
-
-// --- AI FUNCTIONS ---
-
-export const generateAppIllustration = async (): Promise<string | null> => {
-    try {
-        // Proteção contra erro de referência se process.env não existir
-        const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : null;
-        if (!apiKey) {
-            console.warn("API_KEY não encontrada para gerar ilustração.");
-            return null;
-        }
-
-        const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
-            contents: {
-                parts: [
-                    {
-                        text: 'A clean, modern, high-quality isometric 3D illustration of a city map with stylized territory markers in blue and green. Professional aesthetic, soft lighting, minimalist background, suitable for a mobile app dashboard. High resolution, 4k, digital art style.',
-                    },
-                ],
-            },
-            config: {
-                imageConfig: {
-                    aspectRatio: "1:1"
-                }
-            },
-        });
-
-        if (response.candidates?.[0]?.content?.parts) {
-            for (const part of response.candidates[0].content.parts) {
-                if (part.inlineData) {
-                    return `data:image/png;base64,${part.inlineData.data}`;
-                }
-            }
-        }
-        return null;
-    } catch (error) {
-        console.error("Error generating AI image:", error);
-        return null;
+    if (!getLocal(STORAGE_KEYS.REQUESTS)) {
+        setLocal(STORAGE_KEYS.REQUESTS, []);
     }
 };
 
-// --- DATA TRANSFORMATION ---
-const fromSupabaseToTerritory = (data: any): Territory => ({
-    id: data.id,
-    name: data.name,
-    status: data.status,
-    pdfUrl: data.pdf_url,
-    createdAt: new Date(data.created_at),
-    assignedTo: data.assigned_to,
-    assignedToName: data.assigned_to_name,
-    assignmentDate: data.assignment_date ? new Date(data.assignment_date) : null,
-    dueDate: data.due_date ? new Date(data.due_date) : null,
-    history: data.history?.map((h: any) => ({
-        ...h,
-        completedDate: new Date(h.completedDate),
-    })) || [],
-    permanentNotes: data.permanent_notes,
-});
+seedDatabase();
+
+// --- AUTH FUNCTIONS ---
+
+export const apiLogin = async (email: string, pass: string): Promise<User> => {
+    const users: User[] = getLocal(STORAGE_KEYS.USERS);
+    const user = users.find(u => u.email === email);
+    
+    if (!user) throw new Error("Usuário não encontrado.");
+    // No ambiente local não checamos senha real para facilitar o teste
+    setLocal(STORAGE_KEYS.CURRENT_USER, user);
+    return user;
+};
+
+export const apiSignUp = async (name: string, email: string, pass: string): Promise<User> => {
+    const users: User[] = getLocal(STORAGE_KEYS.USERS);
+    if (users.some(u => u.email === email)) throw new Error("E-mail já cadastrado.");
+    
+    const newUser: User = {
+        id: Math.random().toString(36).substr(2, 9),
+        name,
+        email,
+        role: users.length === 0 ? 'admin' : 'publicador'
+    };
+    
+    users.push(newUser);
+    setLocal(STORAGE_KEYS.USERS, users);
+    setLocal(STORAGE_KEYS.CURRENT_USER, newUser);
+    return newUser;
+};
+
+export const apiLogout = async (): Promise<void> => {
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+};
 
 // --- TERRITORY FUNCTIONS ---
 
 export const fetchAllTerritories = async (): Promise<Territory[]> => {
-    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-
-    try {
-        await supabase
-            .from('territories')
-            .update({ status: TerritoryStatus.AVAILABLE })
-            .eq('status', TerritoryStatus.CLOSED)
-            .lt('history[0]->>completedDate', sixtyDaysAgo);
-    } catch (e) {
-        console.warn("Could not update cooldowns automatically");
-    }
-
-    const { data, error } = await supabase
-        .from('territories')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-    if (error) throw new Error(error.message);
-    return (data || []).map(fromSupabaseToTerritory);
+    const data = getLocal(STORAGE_KEYS.TERRITORIES) || [];
+    return data.map((t: any) => ({
+        ...t,
+        createdAt: new Date(t.createdAt),
+        assignmentDate: t.assignmentDate ? new Date(t.assignmentDate) : null,
+        dueDate: t.dueDate ? new Date(t.dueDate) : null,
+        history: t.history.map((h: any) => ({ ...h, completedDate: new Date(h.completedDate) }))
+    }));
 };
 
 export const uploadTerritory = async (name: string, file: File): Promise<void> => {
-    const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
-    const filePath = `${Date.now()}_${cleanName}`;
-    
-    const { error: uploadError } = await supabase.storage
-        .from('maps')
-        .upload(filePath, file, {
-            cacheControl: '3600',
-            upsert: false
-        });
-
-    if (uploadError) {
-        throw new Error(`Falha no Storage: ${uploadError.message}`);
-    }
-
-    const { data: urlData } = supabase.storage
-        .from('maps')
-        .getPublicUrl(filePath);
-
-    const { error: insertError } = await supabase
-        .from('territories')
-        .insert({
-            name,
-            pdf_url: urlData.publicUrl,
-            status: TerritoryStatus.AVAILABLE,
-            history: [],
-        });
-    
-    if (insertError) throw new Error(`Erro ao salvar registro: ${insertError.message}`);
+    // Simulação de upload: usamos um PDF genérico para o demo local
+    const territories = await fetchAllTerritories();
+    const newTerritory: Territory = {
+        id: Math.random().toString(36).substr(2, 9),
+        name,
+        status: TerritoryStatus.AVAILABLE,
+        pdfUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+        createdAt: new Date(),
+        history: [],
+    };
+    territories.push(newTerritory);
+    setLocal(STORAGE_KEYS.TERRITORIES, territories);
 };
 
 export const fetchPublisherData = async (userId: string): Promise<{ myTerritory: Territory | null, hasPendingRequest: boolean }> => {
-    const { data: territoryData, error: territoryError } = await supabase
-        .from('territories')
-        .select('*')
-        .eq('assigned_to', userId)
-        .eq('status', TerritoryStatus.IN_USE)
-        .limit(1);
-
-    if (territoryError) throw new Error(territoryError.message);
-
-    const { data: requestData, error: requestError } = await supabase
-        .from('requests')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('status', RequestStatus.PENDING)
-        .limit(1);
-
-    if (requestError) throw new Error(requestError.message);
-
-    const myTerritory = territoryData && territoryData.length > 0 ? fromSupabaseToTerritory(territoryData[0]) : null;
-    const hasPendingRequest = requestData && requestData.length > 0;
+    const territories = await fetchAllTerritories();
+    const requests = getLocal(STORAGE_KEYS.REQUESTS) || [];
+    
+    const myTerritory = territories.find(t => t.assignedTo === userId && t.status === TerritoryStatus.IN_USE) || null;
+    const hasPendingRequest = requests.some((r: any) => r.userId === userId && r.status === RequestStatus.PENDING);
     
     return { myTerritory, hasPendingRequest };
 };
 
 export const submitReport = async (user: User, territory: Territory, notes: string): Promise<void> => {
-    const newHistoryEntry: TerritoryHistory = {
-        userId: user.id,
-        userName: user.name,
-        completedDate: new Date(),
-        notes
-    };
-
-    const updatedHistory = [newHistoryEntry, ...(territory.history || [])];
-
-    const { error } = await supabase
-        .from('territories')
-        .update({
-            status: TerritoryStatus.CLOSED,
-            assigned_to: null,
-            assigned_to_name: null,
-            assignment_date: null,
-            due_date: null,
-            history: updatedHistory
-        })
-        .eq('id', territory.id);
-
-    if (error) throw new Error(error.message);
+    const territories = await fetchAllTerritories();
+    const idx = territories.findIndex(t => t.id === territory.id);
+    
+    if (idx !== -1) {
+        const newHistory: TerritoryHistory = {
+            userId: user.id,
+            userName: user.name,
+            completedDate: new Date(),
+            notes
+        };
+        
+        territories[idx].status = TerritoryStatus.CLOSED;
+        territories[idx].assignedTo = null;
+        territories[idx].assignedToName = null;
+        territories[idx].assignmentDate = null;
+        territories[idx].dueDate = null;
+        territories[idx].history = [newHistory, ...territories[idx].history];
+        
+        setLocal(STORAGE_KEYS.TERRITORIES, territories);
+    }
 };
 
 export const updateTerritory = async (territoryId: string, data: { name?: string; permanentNotes?: string; }): Promise<void> => {
-    const updateData = {
-        name: data.name,
-        permanent_notes: data.permanentNotes
+    const territories = await fetchAllTerritories();
+    const idx = territories.findIndex(t => t.id === territoryId);
+    if (idx !== -1) {
+        if (data.name) territories[idx].name = data.name;
+        if (data.permanentNotes !== undefined) territories[idx].permanentNotes = data.permanentNotes;
+        setLocal(STORAGE_KEYS.TERRITORIES, territories);
     }
-    const { error } = await supabase
-        .from('territories')
-        .update(updateData)
-        .eq('id', territoryId);
-
-    if (error) throw new Error(error.message);
 };
 
 export const deleteTerritory = async (territoryId: string): Promise<void> => {
-    const { error } = await supabase
-        .from('territories')
-        .delete()
-        .eq('id', territoryId);
-
-    if (error) throw new Error(error.message);
+    const territories = await fetchAllTerritories();
+    const filtered = territories.filter(t => t.id !== territoryId);
+    setLocal(STORAGE_KEYS.TERRITORIES, filtered);
 };
 
 // --- REQUEST FUNCTIONS ---
 
 export const requestTerritory = async (user: User): Promise<void> => {
-    const { data: existing, error: checkError } = await supabase
-        .from('requests')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('status', RequestStatus.PENDING);
-
-    if (checkError) throw new Error(checkError.message);
-    if (existing && existing.length > 0) throw new Error("Você já tem uma solicitação pendente.");
-
-    const { error } = await supabase
-        .from('requests')
-        .insert({
-            user_id: user.id,
-            user_name: user.name,
-            status: RequestStatus.PENDING
-        });
-
-    if (error) throw new Error(error.message);
+    const requests = getLocal(STORAGE_KEYS.REQUESTS) || [];
+    if (requests.some((r: any) => r.userId === user.id && r.status === RequestStatus.PENDING)) {
+        throw new Error("Você já tem uma solicitação pendente.");
+    }
+    
+    const newRequest: TerritoryRequest = {
+        id: Math.random().toString(36).substr(2, 9),
+        userId: user.id,
+        userName: user.name,
+        requestDate: new Date(),
+        status: RequestStatus.PENDING
+    };
+    
+    requests.push(newRequest);
+    setLocal(STORAGE_KEYS.REQUESTS, requests);
 };
 
 export const fetchAllRequests = async (): Promise<TerritoryRequest[]> => {
-    const { data, error } = await supabase
-        .from('requests')
-        .select('*')
-        .eq('status', RequestStatus.PENDING)
-        .order('request_date', { ascending: true });
-
-    if (error) throw new Error(error.message);
-    return (data || []).map(r => ({
-        id: r.id,
-        userId: r.user_id,
-        userName: r.user_name,
-        status: r.status,
-        requestDate: new Date(r.request_date),
-    }));
+    const data = getLocal(STORAGE_KEYS.REQUESTS) || [];
+    return data.map((r: any) => ({ ...r, requestDate: new Date(r.requestDate) }));
 };
 
 export const assignTerritoryToRequest = async (requestId: string, territoryId: string): Promise<void> => {
-    const { data: request, error: requestError } = await supabase
-        .from('requests')
-        .select('user_id, user_name')
-        .eq('id', requestId)
-        .single();
+    const requests = await fetchAllRequests();
+    const territories = await fetchAllTerritories();
     
-    if (requestError || !request) throw new Error("Solicitação não encontrada");
+    const reqIdx = requests.findIndex(r => r.id === requestId);
+    const terrIdx = territories.findIndex(t => t.id === territoryId);
     
-    const assignmentDate = new Date();
-    const dueDate = new Date(assignmentDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-    const { error: territoryError } = await supabase
-        .from('territories')
-        .update({
-            status: TerritoryStatus.IN_USE,
-            assigned_to: request.user_id,
-            assigned_to_name: request.user_name,
-            assignment_date: assignmentDate.toISOString(),
-            due_date: dueDate.toISOString()
-        })
-        .eq('id', territoryId);
-
-    if (territoryError) throw new Error(territoryError.message);
-
-    await rejectRequest(requestId);
+    if (reqIdx !== -1 && terrIdx !== -1) {
+        const assignmentDate = new Date();
+        const dueDate = new Date();
+        dueDate.setDate(assignmentDate.getDate() + 30);
+        
+        territories[terrIdx].status = TerritoryStatus.IN_USE;
+        territories[terrIdx].assignedTo = requests[reqIdx].userId;
+        territories[terrIdx].assignedToName = requests[reqIdx].userName;
+        territories[terrIdx].assignmentDate = assignmentDate;
+        territories[terrIdx].dueDate = dueDate;
+        
+        requests.splice(reqIdx, 1); // Remove a solicitação atendida
+        
+        setLocal(STORAGE_KEYS.TERRITORIES, territories);
+        setLocal(STORAGE_KEYS.REQUESTS, requests);
+    }
 };
 
 export const rejectRequest = async (requestId: string): Promise<void> => {
-    const { error } = await supabase
-        .from('requests')
-        .delete()
-        .eq('id', requestId);
-
-    if (error) throw new Error(error.message);
+    const requests = await fetchAllRequests();
+    const filtered = requests.filter(r => r.id !== requestId);
+    setLocal(STORAGE_KEYS.REQUESTS, filtered);
 };
 
 // --- NOTIFICATION FUNCTIONS ---
 
 export const fetchNotifications = async (user: User): Promise<Notification[]> => {
-    let notifications: Notification[] = [];
+    const notifs: Notification[] = [];
+    const requests = await fetchAllRequests();
+    
     if (user.role === 'admin') {
-        try {
-            const requests = await fetchAllRequests();
-            requests.forEach(req => {
-                notifications.push({
-                    id: `notif_req_${req.id}`,
-                    message: `${req.userName} solicitou um novo território.`,
-                    type: 'info',
-                    read: false,
-                    createdAt: req.requestDate
-                });
+        requests.forEach(r => {
+            notifs.push({
+                id: `req-${r.id}`,
+                message: `${r.userName} solicitou um território.`,
+                type: 'info',
+                read: false,
+                createdAt: r.requestDate
             });
-        } catch (e) {}
-    }
-
-    const { data } = await supabase
-        .from('territories')
-        .select('*')
-        .eq('assigned_to', user.id)
-        .eq('status', TerritoryStatus.IN_USE);
-
-    if (data) {
-        data.forEach(t => {
-            const territory = fromSupabaseToTerritory(t);
-            if (territory.dueDate) {
-                const daysRemaining = Math.ceil((territory.dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                if (daysRemaining <= 7) {
-                     notifications.push({
-                        id: `notif_due_${territory.id}`,
-                        message: `Seu território "${territory.name}" vence em ${daysRemaining} dia(s).`,
-                        type: daysRemaining <= 0 ? 'warning' : 'info',
-                        read: false,
-                        createdAt: new Date()
-                    });
-                }
-            }
         });
     }
-
-    return notifications.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    return notifs;
 };
 
-export const markNotificationsAsRead = async (notificationIds: string[]): Promise<void> => {
-    return Promise.resolve();
+export const markNotificationsAsRead = async (ids: string[]): Promise<void> => {};
+
+export const fetchAllUsers = async (): Promise<User[]> => {
+    return getLocal(STORAGE_KEYS.USERS) || [];
+};
+
+export const updateUserRole = async (userId: string, newRole: 'admin' | 'publicador'): Promise<void> => {
+    const users = await fetchAllUsers();
+    const idx = users.findIndex(u => u.id === userId);
+    if (idx !== -1) {
+        users[idx].role = newRole;
+        setLocal(STORAGE_KEYS.USERS, users);
+    }
 };
