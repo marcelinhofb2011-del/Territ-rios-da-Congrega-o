@@ -1,10 +1,10 @@
 
 const CACHE_NAME = 'territory-pwa-v1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/map-icon.svg',
-  '/manifest.webmanifest'
+  './',
+  'index.html',
+  'map-icon.svg',
+  'manifest.webmanifest'
 ];
 
 self.addEventListener('install', (event) => {
@@ -32,12 +32,13 @@ self.addEventListener('fetch', (event) => {
     caches.match(event.request).then((cachedResponse) => {
       return cachedResponse || fetch(event.request).then((response) => {
         return caches.open(CACHE_NAME).then((cache) => {
+          // Apenas cache de GET e não intercepta chamadas do Supabase para evitar erros de autenticação
           if (event.request.method === 'GET' && !event.request.url.includes('supabase')) {
              cache.put(event.request, response.clone());
           }
           return response;
         });
       });
-    }).catch(() => caches.match('/'))
+    }).catch(() => caches.match('./'))
   );
 });

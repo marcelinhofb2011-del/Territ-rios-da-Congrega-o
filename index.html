@@ -10,11 +10,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Territórios">
-    <link rel="apple-touch-icon" href="/map-icon.svg">
+    <link rel="apple-touch-icon" href="map-icon.svg">
     
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="icon" type="image/svg+xml" href="/map-icon.svg" />
+    <!-- PWA Manifest - Usando caminho relativo para evitar Origin Mismatch -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="map-icon.svg" />
     
     <title>Gerenciador de Territórios</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -55,6 +55,6 @@
 </head>
   <body class="bg-gray-100 antialiased overflow-x-hidden">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="index.tsx"></script>
   </body>
 </html>

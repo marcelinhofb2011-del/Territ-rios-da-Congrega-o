@@ -1,12 +1,5 @@
 
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="512" height="512" rx="112" fill="#2563EB"/>
-  <!-- Grid de Ruas -->
-  <path d="M112 180H400" stroke="white" stroke-width="24" stroke-linecap="round"/>
-  <path d="M112 332H400" stroke="white" stroke-width="24" stroke-linecap="round"/>
-  <path d="M200 112V400" stroke="white" stroke-width="24" stroke-linecap="round"/>
-  <path d="M312 112V400" stroke="white" stroke-width="24" stroke-linecap="round"/>
-  <!-- Marcador de Localização -->
-  <path d="M256 160C222.863 160 196 186.863 196 220C196 265 256 320 256 320C256 320 316 265 316 220C316 186.863 289.137 160 256 160Z" fill="#EF4444"/>
-  <circle cx="256" cy="220" r="24" fill="white"/>
+  <path d="M256 120C181.56 120 121.2 180.36 121.2 254.8C121.2 355.96 256 480 256 480C256 480 390.8 355.96 390.8 254.8C390.8 180.36 330.44 120 256 120ZM256 313.36C223.72 313.36 197.44 287.08 197.44 254.8C197.44 222.52 223.72 196.24 256 196.24C288.28 196.24 314.56 222.52 314.56 254.8C314.56 287.08 288.28 313.36 256 313.36Z" fill="white"/>
 </svg>

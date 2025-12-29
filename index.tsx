@@ -5,9 +5,10 @@ import App from './App';
 
 console.log("App Territórios: Inicializando PWA...");
 
+// Ajuste para caminho relativo para evitar erro de origem cruzada no ai.studio
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    navigator.serviceWorker.register('sw.js')
       .then(reg => console.log('PWA Service Worker Ativo:', reg.scope))
       .catch(err => console.error('Erro SW:', err));
   });

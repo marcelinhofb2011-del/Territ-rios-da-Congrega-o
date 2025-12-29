@@ -1,7 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { generateAppIllustration } from '../services/api';
 
 const LoginPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -11,16 +10,7 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [illustrationUrl, setIllustrationUrl] = useState<string | null>(null);
   const { login, signUp } = useAuth();
-
-  useEffect(() => {
-    const fetchIllustration = async () => {
-      const url = await generateAppIllustration();
-      if (url) setIllustrationUrl(url);
-    };
-    fetchIllustration();
-  }, []);
 
   const toggleMode = (loginMode: boolean) => {
     setIsLogin(loginMode);
@@ -42,8 +32,6 @@ const LoginPage: React.FC = () => {
         await login(email, password);
       } else {
         await signUp(name, email, password);
-        // O usuário será logado e redirecionado automaticamente pelo AuthContext.
-        // Não precisamos mais de mensagens de sucesso ou redirecionamento manual aqui.
       }
     } catch (err: any) {
       setError(err.message || 'Ocorreu um erro. Tente novamente.');
@@ -54,6 +42,17 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-white">
+      {/* Estilos para a pulsação lenta */}
+      <style>{`
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 0.85; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.03); }
+        }
+        .animate-pulse-slow {
+          animation: pulse-slow 4s ease-in-out infinite;
+        }
+      `}</style>
+
       {/* Left Side: Form */}
       <div className="flex flex-col justify-center flex-1 px-4 py-12 sm:px-6 lg:flex-none lg:px-20 xl:px-24">
         <div className="w-full max-w-sm mx-auto lg:w-96">
@@ -150,31 +149,38 @@ const LoginPage: React.FC = () => {
           </div>
           
           <div className="mt-12 text-center lg:text-left text-xs text-gray-400">
-            Gerenciador de Territórios v1.4
+            Gerenciador de Territórios v1.5
           </div>
         </div>
       </div>
 
-      {/* Right Side: Illustration */}
+      {/* Right Side: Map Illustration with Pulse */}
       <div className="hidden lg:block relative flex-1 w-0">
-        <div className="absolute inset-0 bg-blue-600 flex items-center justify-center p-12 overflow-hidden">
-          {illustrationUrl ? (
-            <div className="relative w-full max-w-2xl transform hover:scale-105 transition-transform duration-700">
-               <div className="absolute -inset-4 bg-white/10 blur-3xl rounded-full animate-pulse"></div>
-               <img 
-                 src={illustrationUrl} 
-                 alt="Ilustração de Mapas" 
-                 className="relative z-10 w-full h-auto rounded-3xl shadow-2xl border-4 border-white/20"
-               />
-            </div>
-          ) : (
-            <div className="flex flex-col items-center text-white/50 animate-pulse">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-32 w-32 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                </svg>
-                <p className="text-xl font-medium">Gerando sua visualização...</p>
-            </div>
-          )}
+        <div className="absolute inset-0 bg-blue-600 flex items-center justify-center overflow-hidden">
+          {/* Desenho do Mapa com Pulsação */}
+          <div className="relative w-full max-w-2xl animate-pulse-slow p-12">
+             <svg width="100%" height="100%" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-2xl opacity-90">
+                <rect width="512" height="512" rx="48" fill="#1E40AF" />
+                {/* Malha de Ruas */}
+                <path d="M0 100H512" stroke="white" strokeWidth="12" strokeOpacity="0.2" />
+                <path d="M0 200H512" stroke="white" strokeWidth="20" strokeOpacity="0.3" />
+                <path d="M0 300H512" stroke="white" strokeWidth="12" strokeOpacity="0.2" />
+                <path d="M0 400H512" stroke="white" strokeWidth="12" strokeOpacity="0.2" />
+                
+                <path d="M100 0V512" stroke="white" strokeWidth="12" strokeOpacity="0.2" />
+                <path d="M256 0V512" stroke="white" strokeWidth="20" strokeOpacity="0.3" />
+                <path d="M400 0V512" stroke="white" strokeWidth="12" strokeOpacity="0.2" />
+
+                {/* Marcador Principal */}
+                <path d="M256 160C222.863 160 196 186.863 196 220C196 265 256 320 256 320C256 320 316 265 316 220C316 186.863 289.137 160 256 160Z" fill="#EF4444" />
+                <circle cx="256" cy="220" r="24" fill="white" />
+
+                {/* Marcadores Menores Secundários */}
+                <circle cx="120" cy="150" r="10" fill="#EF4444" opacity="0.6" />
+                <circle cx="380" cy="350" r="10" fill="#EF4444" opacity="0.6" />
+                <circle cx="420" cy="120" r="10" fill="#EF4444" opacity="0.6" />
+             </svg>
+          </div>
           
           <div className="absolute bottom-12 left-12 right-12 text-white">
              <h3 className="text-2xl font-bold mb-2">Seus territórios, organizados.</h3>
