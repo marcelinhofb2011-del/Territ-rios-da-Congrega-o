@@ -1,17 +1,16 @@
 
-const CACHE_NAME = 'territory-pwa-v2';
+const CACHE_NAME = 'territory-pwa-v4';
 const ASSETS = [
   './',
   'index.html',
   'map-icon.svg',
-  'manifest.webmanifest',
-  'index.tsx'
+  'manifest.webmanifest'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('Cache aberto');
+      console.log('SW: Cacheando ativos base');
       return cache.addAll(ASSETS);
     })
   );
@@ -30,8 +29,15 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Ignora chamadas para o Supabase e extensões do browser
-  if (event.request.url.includes('supabase.co') || event.request.url.startsWith('chrome-extension')) {
+  const url = event.request.url;
+
+  // Ignora chamadas externas e métodos não-GET
+  if (
+    url.includes('supabase.co') || 
+    url.includes('googleapis.com') || 
+    url.startsWith('chrome-extension') ||
+    event.request.method !== 'GET'
+  ) {
     return;
   }
 
@@ -41,21 +47,19 @@ self.addEventListener('fetch', (event) => {
         return cachedResponse;
       }
       return fetch(event.request).then((response) => {
-        // Verifica se a resposta é válida antes de colocar no cache
+        // Cacheia apenas recursos da mesma origem para evitar erros de opacidade
         if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
         }
         
         const responseToCache = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          if (event.request.method === 'GET') {
-            cache.put(event.request, responseToCache);
-          }
+          cache.put(event.request, responseToCache);
         });
         
         return response;
       }).catch(() => {
-        // Fallback offline para a página inicial
+        // Fallback para index.html se falhar (Offline Mode)
         if (event.request.mode === 'navigate') {
           return caches.match('./index.html');
         }
