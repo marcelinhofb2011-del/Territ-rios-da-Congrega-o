@@ -25,7 +25,6 @@ export const apiSignUp = async (name: string, email: string, pass: string): Prom
     if (authError) throw new Error(authError.message);
     if (!signUpData.user) throw new Error("Cadastro falhou, usuário não criado.");
     
-    // O perfil será criado por um gatilho ou pela verificação no AuthContext
     return signUpData;
 };
 
@@ -61,27 +60,18 @@ export const updateUserRole = async (userId: string, newRole: 'admin' | 'publica
 };
 
 // --- AI FUNCTIONS ---
-let ai: GoogleGenAI | null = null;
-const getAiClient = () => {
-    if (!ai) {
-        // FIX: Per coding guidelines, the API key must be obtained from process.env.API_KEY
-        // and passed as a named parameter.
-        const geminiApiKey = process.env.API_KEY;
-        if (!geminiApiKey) {
-            console.error("API_KEY environment variable is not set. AI features will be disabled.");
-            return null;
-        }
-        ai = new GoogleGenAI({ apiKey: geminiApiKey });
-    }
-    return ai;
-}
 
 export const generateAppIllustration = async (): Promise<string | null> => {
-    const aiClient = getAiClient();
-    if (!aiClient) return null;
-
     try {
-        const response = await aiClient.models.generateContent({
+        // Proteção contra erro de referência se process.env não existir
+        const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : null;
+        if (!apiKey) {
+            console.warn("API_KEY não encontrada para gerar ilustração.");
+            return null;
+        }
+
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
             contents: {
                 parts: [
@@ -97,9 +87,11 @@ export const generateAppIllustration = async (): Promise<string | null> => {
             },
         });
 
-        for (const part of response.candidates[0].content.parts) {
-            if (part.inlineData) {
-                return `data:image/png;base64,${part.inlineData.data}`;
+        if (response.candidates?.[0]?.content?.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData) {
+                    return `data:image/png;base64,${part.inlineData.data}`;
+                }
             }
         }
         return null;
@@ -148,23 +140,24 @@ export const fetchAllTerritories = async (): Promise<Territory[]> => {
         .order('created_at', { ascending: false });
 
     if (error) throw new Error(error.message);
-    return data.map(fromSupabaseToTerritory);
+    return (data || []).map(fromSupabaseToTerritory);
 };
 
 export const uploadTerritory = async (name: string, file: File): Promise<void> => {
-    console.log(`Iniciando upload do arquivo: ${file.name}`);
-    const filePath = `territories/${Date.now()}_${file.name}`;
+    const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+    const filePath = `${Date.now()}_${cleanName}`;
     
     const { error: uploadError } = await supabase.storage
         .from('maps')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+        });
 
     if (uploadError) {
-        console.error("Erro no Supabase Storage:", uploadError);
-        throw new Error(`Falha no Storage: ${uploadError.message}. Certifique-se de que as políticas RLS para o bucket 'maps' foram criadas.`);
+        throw new Error(`Falha no Storage: ${uploadError.message}`);
     }
 
-    console.log("Upload bem-sucedido. Buscando URL pública...");
     const { data: urlData } = supabase.storage
         .from('maps')
         .getPublicUrl(filePath);
@@ -178,10 +171,7 @@ export const uploadTerritory = async (name: string, file: File): Promise<void> =
             history: [],
         });
     
-    if (insertError) {
-        console.error("Erro ao inserir no banco:", insertError);
-        throw new Error(`Falha ao salvar metadados: ${insertError.message}`);
-    }
+    if (insertError) throw new Error(`Erro ao salvar registro: ${insertError.message}`);
 };
 
 export const fetchPublisherData = async (userId: string): Promise<{ myTerritory: Territory | null, hasPendingRequest: boolean }> => {
@@ -287,7 +277,7 @@ export const fetchAllRequests = async (): Promise<TerritoryRequest[]> => {
         .order('request_date', { ascending: true });
 
     if (error) throw new Error(error.message);
-    return data.map(r => ({
+    return (data || []).map(r => ({
         id: r.id,
         userId: r.user_id,
         userName: r.user_name,
@@ -352,7 +342,7 @@ export const fetchNotifications = async (user: User): Promise<Notification[]> =>
         } catch (e) {}
     }
 
-    const { data, error } = await supabase
+    const { data } = await supabase
         .from('territories')
         .select('*')
         .eq('assigned_to', user.id)

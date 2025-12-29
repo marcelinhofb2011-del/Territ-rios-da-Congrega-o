@@ -22,9 +22,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const getInitialSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        await handleAuthStateChange(session);
-        setLoading(false);
+        try {
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error) {
+                console.error("Erro ao buscar sessão inicial:", error);
+            }
+            await handleAuthStateChange(session);
+        } catch (e) {
+            console.error("Falha catastrófica na inicialização do Auth:", e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     getInitialSession();
@@ -39,31 +47,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const handleAuthStateChange = async (session: Session | null) => {
-     if (session?.user) {
-        let profile = await getUserProfile(session.user.id);
-        
-        if (!profile) {
-            const { count } = await supabase.from('users').select('*', { count: 'exact', head: true });
-            const role = (count === 0 || session.user.email?.toLowerCase() === 'admin@example.com') ? 'admin' : 'publicador';
+     try {
+        if (session?.user) {
+            let profile = await getUserProfile(session.user.id);
             
-            await supabase.from('users').insert({
-                auth_id: session.user.id,
-                name: session.user.user_metadata?.name || 'Usuário',
-                email: session.user.email?.toLowerCase(),
-                role
-            });
-            
-            profile = await getUserProfile(session.user.id);
-        }
+            if (!profile) {
+                const { count, error: countError } = await supabase.from('users').select('*', { count: 'exact', head: true });
+                if (countError) console.warn("Erro ao contar usuários:", countError);
+                
+                const role = (count === 0 || session.user.email?.toLowerCase() === 'admin@example.com') ? 'admin' : 'publicador';
+                
+                await supabase.from('users').insert({
+                    auth_id: session.user.id,
+                    name: session.user.user_metadata?.name || 'Usuário',
+                    email: session.user.email?.toLowerCase(),
+                    role
+                });
+                
+                profile = await getUserProfile(session.user.id);
+            }
 
-        if (profile) {
-            setUser({ id: session.user.id, ...profile });
+            if (profile) {
+                setUser({ id: session.user.id, ...profile });
+            } else {
+                setUser(null);
+            }
         } else {
             setUser(null);
         }
-    } else {
-        setUser(null);
-    }
+     } catch (e) {
+         console.error("Erro ao processar mudança de estado de autenticação:", e);
+         setUser(null);
+     }
   }
   
 
@@ -78,24 +93,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.warn("Sign out API failed, forcing local logout", err);
     } finally {
       setUser(null);
-      // Forçar limpeza de qualquer dado residual no storage
-      localStorage.clear();
-      sessionStorage.clear();
+      if (typeof window !== 'undefined') {
+          localStorage.clear();
+          sessionStorage.clear();
+      }
     }
   };
   
   const signUp = async (name: string, email: string, pass: string) => {
     const response = await apiSignUp(name, email, pass);
-    // Fix: apiSignUp returns the 'data' portion of the Supabase response directly
     if (response && response.session) {
-      // Força a atualização do estado, logando o usuário
       await handleAuthStateChange(response.session);
     }
   };
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, signUp }}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
