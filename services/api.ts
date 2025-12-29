@@ -1,260 +1,265 @@
-
+import { 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword, 
+    signOut,
+    onAuthStateChanged
+} from 'firebase/auth';
+import { 
+    doc, 
+    setDoc, 
+    getDoc, 
+    collection, 
+    getDocs, 
+    updateDoc, 
+    deleteDoc, 
+    query, 
+    where, 
+    addDoc, 
+    orderBy,
+    Timestamp,
+    runTransaction,
+    limit
+} from 'firebase/firestore';
+import { 
+    ref, 
+    uploadBytes, 
+    getDownloadURL, 
+    deleteObject 
+} from 'firebase/storage';
+import { auth, db, storage } from '../firebase/config';
 import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, Notification, TerritoryHistory } from '../types';
-
-// --- DATABASE SIMULATION ---
-const STORAGE_KEYS = {
-    TERRITORIES: 'territory_db_maps',
-    REQUESTS: 'territory_db_requests',
-    USERS: 'territory_db_users',
-    CURRENT_USER: 'territory_current_session'
-};
-
-const getLocal = (key: string) => {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : null;
-};
-
-const setLocal = (key: string, data: any) => {
-    localStorage.setItem(key, JSON.stringify(data));
-};
-
-// Initial Data Seed
-const seedDatabase = () => {
-    if (!getLocal(STORAGE_KEYS.TERRITORIES)) {
-        const initialTerritories: Territory[] = [
-            {
-                id: '1',
-                name: 'Território 01 - Centro',
-                status: TerritoryStatus.AVAILABLE,
-                pdfUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-                createdAt: new Date(),
-                history: [],
-                permanentNotes: 'Área comercial movimentada.'
-            },
-            {
-                id: '2',
-                name: 'Território 02 - Vila Real',
-                status: TerritoryStatus.AVAILABLE,
-                pdfUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-                createdAt: new Date(),
-                history: [],
-                permanentNotes: 'Muitos prédios com interfone.'
-            }
-        ];
-        setLocal(STORAGE_KEYS.TERRITORIES, initialTerritories);
-    }
-    
-    if (!getLocal(STORAGE_KEYS.USERS)) {
-        setLocal(STORAGE_KEYS.USERS, [
-            { id: 'admin-id', name: 'Administrador Local', email: 'admin@teste.com', role: 'admin' }
-        ]);
-    }
-
-    if (!getLocal(STORAGE_KEYS.REQUESTS)) {
-        setLocal(STORAGE_KEYS.REQUESTS, []);
-    }
-};
-
-seedDatabase();
 
 // --- AUTH FUNCTIONS ---
 
 export const apiLogin = async (email: string, pass: string): Promise<User> => {
-    const users: User[] = getLocal(STORAGE_KEYS.USERS);
-    const user = users.find(u => u.email === email);
+    const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+    const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
     
-    if (!user) throw new Error("Usuário não encontrado.");
-    // No ambiente local não checamos senha real para facilitar o teste
-    setLocal(STORAGE_KEYS.CURRENT_USER, user);
-    return user;
+    if (!userDoc.exists()) throw new Error("Perfil de usuário não encontrado.");
+    return userDoc.data() as User;
 };
 
 export const apiSignUp = async (name: string, email: string, pass: string): Promise<User> => {
-    const users: User[] = getLocal(STORAGE_KEYS.USERS);
-    if (users.some(u => u.email === email)) throw new Error("E-mail já cadastrado.");
+    const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+    const userId = userCredential.user.uid;
+    
+    // O primeiro usuário a se cadastrar vira admin automaticamente
+    const usersSnapshot = await getDocs(query(collection(db, 'users'), limit(1)));
+    const role = usersSnapshot.empty ? 'admin' : 'publicador';
     
     const newUser: User = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: userId,
         name,
         email,
-        role: users.length === 0 ? 'admin' : 'publicador'
+        role
     };
     
-    users.push(newUser);
-    setLocal(STORAGE_KEYS.USERS, users);
-    setLocal(STORAGE_KEYS.CURRENT_USER, newUser);
+    await setDoc(doc(db, 'users', userId), newUser);
     return newUser;
 };
 
 export const apiLogout = async (): Promise<void> => {
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    await signOut(auth);
 };
 
 // --- TERRITORY FUNCTIONS ---
 
 export const fetchAllTerritories = async (): Promise<Territory[]> => {
-    const data = getLocal(STORAGE_KEYS.TERRITORIES) || [];
-    return data.map((t: any) => ({
-        ...t,
-        createdAt: new Date(t.createdAt),
-        assignmentDate: t.assignmentDate ? new Date(t.assignmentDate) : null,
-        dueDate: t.dueDate ? new Date(t.dueDate) : null,
-        history: t.history.map((h: any) => ({ ...h, completedDate: new Date(h.completedDate) }))
-    }));
+    const q = query(collection(db, 'territories'), orderBy('name', 'asc'));
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            ...data,
+            id: doc.id,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            assignmentDate: data.assignmentDate?.toDate() || null,
+            dueDate: data.dueDate?.toDate() || null,
+            history: (data.history || []).map((h: any) => ({
+                ...h,
+                completedDate: h.completedDate?.toDate() || new Date()
+            }))
+        } as Territory;
+    });
 };
 
 export const uploadTerritory = async (name: string, file: File): Promise<void> => {
-    // Simulação de upload: usamos um PDF genérico para o demo local
-    const territories = await fetchAllTerritories();
-    const newTerritory: Territory = {
-        id: Math.random().toString(36).substr(2, 9),
+    const fileName = `${Date.now()}_${file.name}`;
+    const storageRef = ref(storage, `maps/${fileName}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    const pdfUrl = await getDownloadURL(snapshot.ref);
+    
+    const newTerritory = {
         name,
         status: TerritoryStatus.AVAILABLE,
-        pdfUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-        createdAt: new Date(),
+        pdfUrl,
+        createdAt: Timestamp.now(),
         history: [],
+        permanentNotes: '',
+        assignedTo: null,
+        assignedToName: null,
+        assignmentDate: null,
+        dueDate: null
     };
-    territories.push(newTerritory);
-    setLocal(STORAGE_KEYS.TERRITORIES, territories);
+    
+    await addDoc(collection(db, 'territories'), newTerritory);
 };
 
-export const fetchPublisherData = async (userId: string): Promise<{ myTerritory: Territory | null, hasPendingRequest: boolean }> => {
-    const territories = await fetchAllTerritories();
-    const requests = getLocal(STORAGE_KEYS.REQUESTS) || [];
-    
-    const myTerritory = territories.find(t => t.assignedTo === userId && t.status === TerritoryStatus.IN_USE) || null;
-    const hasPendingRequest = requests.some((r: any) => r.userId === userId && r.status === RequestStatus.PENDING);
-    
-    return { myTerritory, hasPendingRequest };
-};
-
-export const submitReport = async (user: User, territory: Territory, notes: string): Promise<void> => {
-    const territories = await fetchAllTerritories();
-    const idx = territories.findIndex(t => t.id === territory.id);
-    
-    if (idx !== -1) {
-        const newHistory: TerritoryHistory = {
-            userId: user.id,
-            userName: user.name,
-            completedDate: new Date(),
-            notes
-        };
-        
-        territories[idx].status = TerritoryStatus.CLOSED;
-        territories[idx].assignedTo = null;
-        territories[idx].assignedToName = null;
-        territories[idx].assignmentDate = null;
-        territories[idx].dueDate = null;
-        territories[idx].history = [newHistory, ...territories[idx].history];
-        
-        setLocal(STORAGE_KEYS.TERRITORIES, territories);
-    }
-};
-
-export const updateTerritory = async (territoryId: string, data: { name?: string; permanentNotes?: string; }): Promise<void> => {
-    const territories = await fetchAllTerritories();
-    const idx = territories.findIndex(t => t.id === territoryId);
-    if (idx !== -1) {
-        if (data.name) territories[idx].name = data.name;
-        if (data.permanentNotes !== undefined) territories[idx].permanentNotes = data.permanentNotes;
-        setLocal(STORAGE_KEYS.TERRITORIES, territories);
-    }
+export const updateTerritory = async (territoryId: string, data: Partial<Territory>): Promise<void> => {
+    const territoryRef = doc(db, 'territories', territoryId);
+    await updateDoc(territoryRef, data);
 };
 
 export const deleteTerritory = async (territoryId: string): Promise<void> => {
-    const territories = await fetchAllTerritories();
-    const filtered = territories.filter(t => t.id !== territoryId);
-    setLocal(STORAGE_KEYS.TERRITORIES, filtered);
-};
-
-// --- REQUEST FUNCTIONS ---
-
-export const requestTerritory = async (user: User): Promise<void> => {
-    const requests = getLocal(STORAGE_KEYS.REQUESTS) || [];
-    if (requests.some((r: any) => r.userId === user.id && r.status === RequestStatus.PENDING)) {
-        throw new Error("Você já tem uma solicitação pendente.");
+    const territoryDoc = await getDoc(doc(db, 'territories', territoryId));
+    if (territoryDoc.exists()) {
+        const data = territoryDoc.data();
+        if (data.pdfUrl) {
+            try {
+                // Extrair path do URL para deletar se necessário, 
+                // ou apenas ignorar se for URL externa
+                const fileRef = ref(storage, data.pdfUrl);
+                await deleteObject(fileRef);
+            } catch (e) { console.error("Erro ao deletar arquivo:", e); }
+        }
     }
-    
-    const newRequest: TerritoryRequest = {
-        id: Math.random().toString(36).substr(2, 9),
-        userId: user.id,
-        userName: user.name,
-        requestDate: new Date(),
-        status: RequestStatus.PENDING
-    };
-    
-    requests.push(newRequest);
-    setLocal(STORAGE_KEYS.REQUESTS, requests);
+    await deleteDoc(doc(db, 'territories', territoryId));
 };
+
+// --- REQUESTS & ASSIGNMENT ---
 
 export const fetchAllRequests = async (): Promise<TerritoryRequest[]> => {
-    const data = getLocal(STORAGE_KEYS.REQUESTS) || [];
-    return data.map((r: any) => ({ ...r, requestDate: new Date(r.requestDate) }));
+    const q = query(collection(db, 'requests'), where('status', '==', RequestStatus.PENDING), orderBy('requestDate', 'desc'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id,
+        requestDate: doc.data().requestDate?.toDate() || new Date()
+    } as TerritoryRequest));
+};
+
+export const requestTerritory = async (user: User): Promise<void> => {
+    const q = query(collection(db, 'requests'), 
+        where('userId', '==', user.id), 
+        where('status', '==', RequestStatus.PENDING)
+    );
+    const existing = await getDocs(q);
+    if (!existing.empty) throw new Error("Você já possui uma solicitação pendente.");
+
+    await addDoc(collection(db, 'requests'), {
+        userId: user.id,
+        userName: user.name,
+        requestDate: Timestamp.now(),
+        status: RequestStatus.PENDING
+    });
 };
 
 export const assignTerritoryToRequest = async (requestId: string, territoryId: string): Promise<void> => {
-    const requests = await fetchAllRequests();
-    const territories = await fetchAllTerritories();
-    
-    const reqIdx = requests.findIndex(r => r.id === requestId);
-    const terrIdx = territories.findIndex(t => t.id === territoryId);
-    
-    if (reqIdx !== -1 && terrIdx !== -1) {
-        const assignmentDate = new Date();
+    await runTransaction(db, async (transaction) => {
+        const requestRef = doc(db, 'requests', requestId);
+        const territoryRef = doc(db, 'territories', territoryId);
+        
+        const requestDoc = await transaction.get(requestRef);
+        const territoryDoc = await transaction.get(territoryRef);
+        
+        if (!requestDoc.exists() || !territoryDoc.exists()) throw new Error("Documento não encontrado.");
+        
+        const reqData = requestDoc.data();
         const dueDate = new Date();
-        dueDate.setDate(assignmentDate.getDate() + 30);
+        dueDate.setDate(dueDate.getDate() + 30); // 30 dias de prazo
+
+        transaction.update(territoryRef, {
+            status: TerritoryStatus.IN_USE,
+            assignedTo: reqData.userId,
+            assignedToName: reqData.userName,
+            assignmentDate: Timestamp.now(),
+            dueDate: Timestamp.fromDate(dueDate)
+        });
         
-        territories[terrIdx].status = TerritoryStatus.IN_USE;
-        territories[terrIdx].assignedTo = requests[reqIdx].userId;
-        territories[terrIdx].assignedToName = requests[reqIdx].userName;
-        territories[terrIdx].assignmentDate = assignmentDate;
-        territories[terrIdx].dueDate = dueDate;
+        transaction.update(requestRef, { status: RequestStatus.APPROVED });
         
-        requests.splice(reqIdx, 1); // Remove a solicitação atendida
-        
-        setLocal(STORAGE_KEYS.TERRITORIES, territories);
-        setLocal(STORAGE_KEYS.REQUESTS, requests);
-    }
+        // Criar notificação para o usuário
+        const notifRef = doc(collection(db, 'notifications'));
+        transaction.set(notifRef, {
+            userId: reqData.userId,
+            message: `O território "${territoryDoc.data().name}" foi atribuído a você.`,
+            type: 'success',
+            read: false,
+            createdAt: Timestamp.now()
+        });
+    });
 };
 
 export const rejectRequest = async (requestId: string): Promise<void> => {
-    const requests = await fetchAllRequests();
-    const filtered = requests.filter(r => r.id !== requestId);
-    setLocal(STORAGE_KEYS.REQUESTS, filtered);
+    await updateDoc(doc(db, 'requests', requestId), { status: RequestStatus.REJECTED });
 };
 
-// --- NOTIFICATION FUNCTIONS ---
+export const submitReport = async (user: User, territory: Territory, notes: string): Promise<void> => {
+    const territoryRef = doc(db, 'territories', territory.id);
+    
+    const historyEntry = {
+        userId: user.id,
+        userName: user.name,
+        completedDate: Timestamp.now(),
+        notes
+    };
 
-export const fetchNotifications = async (user: User): Promise<Notification[]> => {
-    const notifs: Notification[] = [];
-    const requests = await fetchAllRequests();
-    
-    if (user.role === 'admin') {
-        requests.forEach(r => {
-            notifs.push({
-                id: `req-${r.id}`,
-                message: `${r.userName} solicitou um território.`,
-                type: 'info',
-                read: false,
-                createdAt: r.requestDate
-            });
-        });
-    }
-    
-    return notifs;
+    await updateDoc(territoryRef, {
+        status: TerritoryStatus.AVAILABLE,
+        assignedTo: null,
+        assignedToName: null,
+        assignmentDate: null,
+        dueDate: null,
+        history: [...(territory.history || []), historyEntry]
+    });
 };
 
-export const markNotificationsAsRead = async (ids: string[]): Promise<void> => {};
+// --- USER MANAGEMENT ---
 
 export const fetchAllUsers = async (): Promise<User[]> => {
-    return getLocal(STORAGE_KEYS.USERS) || [];
+    const querySnapshot = await getDocs(query(collection(db, 'users'), orderBy('name', 'asc')));
+    return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
 };
 
-export const updateUserRole = async (userId: string, newRole: 'admin' | 'publicador'): Promise<void> => {
-    const users = await fetchAllUsers();
-    const idx = users.findIndex(u => u.id === userId);
-    if (idx !== -1) {
-        users[idx].role = newRole;
-        setLocal(STORAGE_KEYS.USERS, users);
+export const updateUserRole = async (userId: string, role: 'admin' | 'publicador'): Promise<void> => {
+    await updateDoc(doc(db, 'users', userId), { role });
+};
+
+// --- NOTIFICATIONS ---
+
+export const fetchNotifications = async (user: User): Promise<Notification[]> => {
+    const q = query(collection(db, 'notifications'), where('userId', '==', user.id), orderBy('createdAt', 'desc'), limit(20));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id,
+        createdAt: doc.data().createdAt?.toDate() || new Date()
+    } as Notification));
+};
+
+export const markNotificationsAsRead = async (ids: string[]): Promise<void> => {
+    for (const id of ids) {
+        await updateDoc(doc(db, 'notifications', id), { read: true });
     }
+};
+
+export const fetchPublisherData = async (userId: string): Promise<{ myTerritory: Territory | null, hasPendingRequest: boolean }> => {
+    const territoriesQ = query(collection(db, 'territories'), where('assignedTo', '==', userId), where('status', '==', TerritoryStatus.IN_USE));
+    const territorySnapshot = await getDocs(territoriesQ);
+    const myTerritory = !territorySnapshot.empty ? { 
+        ...territorySnapshot.docs[0].data(), 
+        id: territorySnapshot.docs[0].id,
+        dueDate: territorySnapshot.docs[0].data().dueDate?.toDate() || null,
+        assignmentDate: territorySnapshot.docs[0].data().assignmentDate?.toDate() || null,
+        history: (territorySnapshot.docs[0].data().history || []).map((h:any) => ({
+            ...h, 
+            completedDate: h.completedDate?.toDate() || new Date()
+        }))
+    } as Territory : null;
+    
+    const requestQ = query(collection(db, 'requests'), where('userId', '==', userId), where('status', '==', RequestStatus.PENDING));
+    const requestSnapshot = await getDocs(requestQ);
+    
+    return { myTerritory, hasPendingRequest: !requestSnapshot.empty };
 };

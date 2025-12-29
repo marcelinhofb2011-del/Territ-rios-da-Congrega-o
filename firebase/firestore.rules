@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Função auxiliar para verificar se o usuário é admin
+    function isAdmin() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Função para verificar se o ID do usuário autenticado coincide com o ID do documento/recurso
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Usuários
+    match /users/{userId} {
+      // Pode ler/atualizar se for o dono ou admin. 
+      // Pode criar se estiver autenticado e o ID do documento for o seu UID.
+      allow read: if request.auth != null && (isOwner(userId) || isAdmin());
+      allow create: if request.auth != null && isOwner(userId);
+      allow update: if request.auth != null && (isOwner(userId) || isAdmin());
+    }
+
+    // Territórios
+    match /territories/{territoryId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Solicitações
+    match /requests/{requestId} {
+      // Usuário vê as suas; Admin vê todas.
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      // Só pode criar se o campo userId do documento for o seu próprio UID.
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      // Só admin aprova, rejeita ou deleta.
+      allow update, delete: if isAdmin();
+    }
+
+    // Notificações
+    match /notifications/{notificationId} {
+      // Usuário lê e marca como lida as suas notificações.
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Update restrito a marcar como lido (geralmente feito pelo app).
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Apenas admins (sistema) criam notificações.
+      allow create: if isAdmin();
+    }
+  }
+}

@@ -2,6 +2,9 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { User } from '../types';
 import { apiLogin, apiLogout, apiSignUp } from '../services/api';
+import { auth, db } from '../firebase/config';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   user: User | null;
@@ -18,29 +21,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkSession = () => {
-        const savedUser = localStorage.getItem('territory_current_session');
-        if (savedUser) {
-            setUser(JSON.parse(savedUser));
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (userDoc.exists()) {
+            setUser({ ...userDoc.data(), id: firebaseUser.uid } as User);
+          } else {
+            setUser(null);
+          }
+        } catch (e) {
+          console.error("Erro ao buscar perfil:", e);
+          setUser(null);
         }
-        setLoading(false);
-    };
-    checkSession();
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const login = async (email: string, pass: string) => {
-    const loggedUser = await apiLogin(email, pass);
-    setUser(loggedUser);
+    await apiLogin(email, pass);
   };
 
   const logout = async () => {
     await apiLogout();
-    setUser(null);
   };
   
   const signUp = async (name: string, email: string, pass: string) => {
-    const newUser = await apiSignUp(name, email, pass);
-    setUser(newUser);
+    await apiSignUp(name, email, pass);
   };
 
   return (

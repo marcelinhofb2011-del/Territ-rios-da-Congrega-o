@@ -1,4 +1,2 @@
-
-// Este arquivo foi desativado para o modo offline local.
+// Arquivo desativado. Sistema migrado para Firebase.
 export const supabase = null;
-export const getUserProfile = async () => null;
