@@ -1,80 +1,108 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Territory, TerritoryRequest, TerritoryStatus, User } from '../types';
+import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus } from '../types';
 import { 
     fetchAllTerritories, fetchAllRequests, assignTerritoryToRequest, rejectRequest, uploadTerritory, 
-    updateTerritory, deleteTerritory, fetchAllUsers, updateUserRole 
+    updateTerritory, deleteTerritory, fetchAllUsers, updateUserRole, createTerritory 
 } from '../services/api';
-import { formatDate, getDeadlineColorInfo } from '../utils/helpers';
-import { useAuth } from '../hooks/useAuth';
+import { formatDate } from '../utils/helpers';
+
+// --- MODAIS ---
 
 const TerritoryHistoryModal: React.FC<{ territory: Territory; onClose: () => void; }> = ({ territory, onClose }) => {
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-8 w-full max-w-2xl">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold">Histórico de "{territory.name}"</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">&times;</button>
+                    <h2 className="text-2xl font-black text-gray-800">Histórico: {territory.name}</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-800 text-3xl transition-colors">&times;</button>
                 </div>
-                <div className="max-h-[60vh] overflow-y-auto pr-4">
-                    {territory.history.length > 0 ? (
+                <div className="max-h-[60vh] overflow-y-auto pr-2 no-scrollbar">
+                    {territory.history && territory.history.length > 0 ? (
                         <ul className="space-y-4">
-                            {territory.history.map((entry, index) => (
-                                <li key={index} className="border-b pb-3">
-                                    <p className="font-semibold">{entry.userName} fechou o território em {formatDate(entry.completedDate)}.</p>
-                                    {entry.notes && <p className="text-sm text-gray-600 mt-2 bg-gray-50 p-2 rounded-md"><strong>Notas:</strong> {entry.notes}</p>}
+                            {territory.history.slice().reverse().map((entry, index) => (
+                                <li key={index} className="border-b border-gray-50 pb-4 last:border-0">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <p className="font-bold text-gray-800">{entry.userName || 'Publicador'}</p>
+                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-tighter">{formatDate(entry.completedDate)}</p>
+                                    </div>
+                                    {entry.notes && <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-xl italic">"{entry.notes}"</p>}
                                 </li>
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-gray-500">Nenhum histórico registrado para este território.</p>
+                        <div className="text-center py-12 text-gray-400 italic">Nenhum histórico registrado ainda.</div>
                     )}
+                </div>
+                <div className="mt-8">
+                    <button onClick={onClose} className="w-full py-4 bg-gray-100 text-gray-600 font-bold rounded-2xl hover:bg-gray-200 transition-colors">Fechar</button>
                 </div>
             </div>
         </div>
     );
 };
 
-
-const UploadTerritoryModal: React.FC<{ 
-    onClose: () => void; 
-    onUpload: (name: string, file: File) => Promise<void>; 
-    isLoading: boolean;
-    error: string | null;
-}> = ({ onClose, onUpload, isLoading, error }) => {
+const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ onClose, onAdded }) => {
     const [name, setName] = useState('');
     const [file, setFile] = useState<File | null>(null);
+    const [link, setLink] = useState('');
+    const [mode, setMode] = useState<'file' | 'link'>('file');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (name && file && !isLoading) {
-            await onUpload(name, file);
+        setError('');
+        setLoading(true);
+        try {
+            if (mode === 'file') {
+                if (!file) throw new Error("Selecione um arquivo (PDF ou Imagem).");
+                await uploadTerritory(name, file);
+            } else {
+                if (!link) throw new Error("Insira o link do mapa.");
+                await createTerritory(name, link);
+            }
+            onAdded();
+            onClose();
+        } catch (err: any) {
+            setError(err.message || "Erro ao salvar mapa.");
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-8 w-full max-w-md">
-                <h2 className="text-2xl font-bold mb-4">Carregar Novo Território</h2>
-                 {error && (
-                    <div className="bg-red-50 border-l-4 border-red-400 text-red-700 p-4 mb-6 rounded-md" role="alert">
-                        <p className="font-bold">Erro no Upload</p>
-                        <p className="text-sm">{error}</p>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
+                <h2 className="text-2xl font-black mb-6 text-gray-800">Novo Território</h2>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl">{error}</p>}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Nome/Número do Mapa</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" placeholder="Ex: Território 05" />
                     </div>
-                )}
-                <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="territory-name">Nome do Território</label>
-                        <input id="territory-name" type="text" value={name} onChange={e => setName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-50 leading-tight focus:outline-none focus:shadow-outline" />
+                    
+                    <div className="flex p-1 bg-gray-100 rounded-xl">
+                        <button type="button" onClick={() => setMode('file')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${mode === 'file' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>Arquivo</button>
+                        <button type="button" onClick={() => setMode('link')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${mode === 'link' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>Link Externo</button>
                     </div>
-                    <div className="mb-6">
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="territory-file">Arquivo PDF do Mapa</label>
-                        <input id="territory-file" type="file" accept=".pdf" onChange={e => setFile(e.target.files ? e.target.files[0] : null)} required className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-50 leading-tight focus:outline-none focus:shadow-outline" />
-                    </div>
-                    <div className="flex items-center justify-end gap-4">
-                        <button type="button" onClick={onClose} disabled={isLoading} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
-                        <button type="submit" disabled={isLoading || !name || !file} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:bg-blue-300">
-                            {isLoading ? 'Carregando...' : 'Carregar'}
+
+                    {mode === 'file' ? (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Arquivo (PDF/Img)</label>
+                            <input type="file" accept="application/pdf,image/*" onChange={e => setFile(e.target.files?.[0] || null)} className="w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                        </div>
+                    ) : (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Link do PDF/Imagem</label>
+                            <input type="url" value={link} onChange={e => setLink(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium" placeholder="https://..." />
+                        </div>
+                    )}
+
+                    <div className="flex gap-4 pt-4">
+                        <button type="button" onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-600 font-bold rounded-2xl hover:bg-gray-200 transition-colors">Cancelar</button>
+                        <button type="submit" disabled={loading} className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 disabled:bg-blue-300">
+                            {loading ? 'Salvando...' : 'Criar'}
                         </button>
                     </div>
                 </form>
@@ -83,504 +111,237 @@ const UploadTerritoryModal: React.FC<{
     );
 };
 
-const EditTerritoryModal: React.FC<{ territory: Territory; onClose: () => void; onSave: (territoryId: string, data: { name: string; permanentNotes: string }) => Promise<void>; }> = ({ territory, onClose, onSave }) => {
-    const [name, setName] = useState(territory.name);
-    const [permanentNotes, setPermanentNotes] = useState(territory.permanentNotes || '');
-    const [loading, setLoading] = useState(false);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        await onSave(territory.id, { name, permanentNotes });
-        setLoading(false);
-        onClose();
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-8 w-full max-w-md">
-                <h2 className="text-2xl font-bold mb-4">Editar Território</h2>
-                <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="edit-territory-name">Nome do Território</label>
-                        <input id="edit-territory-name" type="text" value={name} onChange={e => setName(e.target.value)} required className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-50 leading-tight focus:outline-none focus:shadow-outline" />
-                    </div>
-                     <div className="mb-4">
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="permanent-notes">Notas Permanentes</label>
-                        <textarea id="permanent-notes" value={permanentNotes} onChange={e => setPermanentNotes(e.target.value)} rows={3} className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-50 leading-tight focus:outline-none focus:shadow-outline" placeholder="Ex: Prédio com porteiro, cão bravo, etc."></textarea>
-                        <p className="text-xs text-gray-500 mt-1">Estas notas serão sempre visíveis para qualquer publicador que trabalhar neste território.</p>
-                    </div>
-                    <div className="flex items-center justify-end gap-4 mt-6">
-                        <button type="button" onClick={onClose} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
-                        <button type="submit" disabled={loading} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:bg-blue-300">
-                            {loading ? 'Salvando...' : 'Salvar Alterações'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-const AssignTerritoryModal: React.FC<{
-    request: TerritoryRequest;
-    availableTerritories: Territory[];
-    onClose: () => void;
-    onConfirm: (requestId: string, territoryId: string) => Promise<void>;
-}> = ({ request, availableTerritories, onClose, onConfirm }) => {
-    const [selectedTerritoryId, setSelectedTerritoryId] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedTerritoryId) return;
-        setLoading(true);
-        await onConfirm(request.id, selectedTerritoryId);
-        setLoading(false);
-        onClose();
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-8 w-full max-w-md">
-                <h2 className="text-2xl font-bold mb-4">Atribuir Território</h2>
-                <p className="text-gray-600 mb-6">Selecione um território disponível para atribuir a <span className="font-semibold">{request.userName}</span>.</p>
-                <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="territory-select">Territórios Disponíveis</label>
-                        <select
-                            id="territory-select"
-                            value={selectedTerritoryId}
-                            onChange={e => setSelectedTerritoryId(e.target.value)}
-                            required
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-50 leading-tight focus:outline-none focus:shadow-outline"
-                        >
-                            <option value="" disabled>Selecione um território</option>
-                            {availableTerritories.map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="flex items-center justify-end gap-4 mt-8">
-                        <button type="button" onClick={onClose} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
-                        <button type="submit" disabled={loading || !selectedTerritoryId} className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:bg-green-300">
-                            {loading ? 'Atribuindo...' : 'Confirmar Atribuição'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-
-const ConfirmationModal: React.FC<{ 
-    onConfirm: () => void; 
-    onClose: () => void; 
-    title: string; 
-    message: string; 
-    confirmText?: string;
-    confirmButtonClass?: string;
-}> = ({ onConfirm, onClose, title, message, confirmText = "Confirmar", confirmButtonClass = "bg-red-600 hover:bg-red-700" }) => {
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-8 w-full max-w-md">
-                <h2 className="text-2xl font-bold mb-4">{title}</h2>
-                <p className="text-gray-600 mb-6">{message}</p>
-                <div className="flex items-center justify-end gap-4">
-                    <button onClick={onClose} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
-                    <button onClick={onConfirm} className={`${confirmButtonClass} text-white font-bold py-2 px-4 rounded`}>{confirmText}</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const StatsCard: React.FC<{ title: string; value: string | number; }> = ({ title, value }) => (
-    <div className="bg-white p-4 rounded-lg shadow">
-        <h4 className="text-sm text-gray-500">{title}</h4>
-        <p className="text-2xl font-bold text-gray-800">{value}</p>
-    </div>
-);
-
-const StatisticsPanel: React.FC<{ territories: Territory[] }> = ({ territories }) => {
-    const stats = useMemo(() => {
-        const statusCounts = territories.reduce((acc, t) => {
-            acc[t.status] = (acc[t.status] || 0) + 1;
-            return acc;
-        }, {} as Record<TerritoryStatus, number>);
-
-        const inactiveTerritories = territories
-            .filter(t => t.status === TerritoryStatus.AVAILABLE || t.status === TerritoryStatus.CLOSED)
-            .map(t => {
-                const lastActivityDate = t.history.length > 0
-                    ? t.history[t.history.length - 1].completedDate
-                    : t.createdAt;
-                const daysInactive = (new Date().getTime() - new Date(lastActivityDate).getTime()) / (1000 * 3600 * 24);
-                return { ...t, daysInactive };
-            })
-            .sort((a, b) => b.daysInactive - a.daysInactive)
-            .slice(0, 3);
-        
-        return {
-            total: territories.length,
-            available: statusCounts[TerritoryStatus.AVAILABLE] || 0,
-            inUse: statusCounts[TerritoryStatus.IN_USE] || 0,
-            inactiveTerritories,
-        };
-    }, [territories]);
-
-    return (
-        <section className="mb-8">
-            <h2 className="text-2xl font-semibold text-gray-700 mb-4">Visão Geral e Estatísticas</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatsCard title="Total de Territórios" value={stats.total} />
-                <StatsCard title="Disponíveis" value={stats.available} />
-                <StatsCard title="Em Uso" value={stats.inUse} />
-                <div className="md:col-span-2 lg:col-span-1 bg-white p-4 rounded-lg shadow">
-                     <h4 className="text-sm text-gray-500">Inativos por Mais Tempo</h4>
-                     {stats.inactiveTerritories.length > 0 ? (
-                        <ul className="mt-2 space-y-1">
-                            {stats.inactiveTerritories.map(t => (
-                                <li key={t.id} className="text-sm text-gray-800 flex justify-between">
-                                    <span>{t.name}</span>
-                                    <span className="font-semibold">{Math.floor(t.daysInactive)} dias</span>
-                                </li>
-                            ))}
-                        </ul>
-                     ) : <p className="text-sm text-gray-600 mt-2">Nenhum território inativo.</p>}
-                </div>
-            </div>
-        </section>
-    );
-};
-
+// --- COMPONENTE PRINCIPAL ---
 
 const AdminDashboard: React.FC = () => {
-    const { user: currentUser } = useAuth();
     const [territories, setTerritories] = useState<Territory[]>([]);
     const [requests, setRequests] = useState<TerritoryRequest[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [activeTab, setActiveTab] = useState<'territorios' | 'usuarios'>('territorios');
+    const [activeTab, setActiveTab] = useState<'territories' | 'users'>('territories');
     
-    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-    const [uploadError, setUploadError] = useState<string | null>(null);
-    const [editingTerritory, setEditingTerritory] = useState<Territory | null>(null);
-    const [deletingTerritory, setDeletingTerritory] = useState<Territory | null>(null);
-    const [assigningRequest, setAssigningRequest] = useState<TerritoryRequest | null>(null);
-    const [actionLoading, setActionLoading] = useState<string | null>(null);
-    const [viewingHistory, setViewingHistory] = useState<Territory | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<TerritoryStatus | ''>('');
+    // UI States
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [viewHistory, setViewHistory] = useState<Territory | null>(null);
+    const [fulfillingRequestId, setFulfillingRequestId] = useState<string | null>(null);
+    const [selectedMapForRequest, setSelectedMapForRequest] = useState<string>('');
 
-
-    const fetchData = useCallback(async () => {
-        setError('');
+    const loadData = useCallback(async () => {
+        setLoading(true);
         try {
-            // Tenta buscar cada dado individualmente para não falhar tudo de uma vez
-            const [territoriesData, requestsData, usersData] = await Promise.allSettled([
+            const [t, r, u] = await Promise.all([
                 fetchAllTerritories(),
                 fetchAllRequests(),
                 fetchAllUsers()
             ]);
-
-            if (territoriesData.status === 'fulfilled') setTerritories(territoriesData.value);
-            else console.error("Falha ao carregar territórios", territoriesData.reason);
-
-            if (requestsData.status === 'fulfilled') setRequests(requestsData.value);
-            else console.error("Falha ao carregar solicitações", requestsData.reason);
-
-            if (usersData.status === 'fulfilled') setUsers(usersData.value);
-            else console.error("Falha ao carregar usuários", usersData.reason);
-
-            if (territoriesData.status === 'rejected' && requestsData.status === 'rejected' && usersData.status === 'rejected') {
-                setError('Falha crítica ao carregar os dados. Verifique o console para mais detalhes.');
-            } else if (territoriesData.status === 'rejected' || requestsData.status === 'rejected' || usersData.status === 'rejected') {
-                // Se algum falhou mas outros passaram, apenas logamos, mas a interface continua
-                console.warn("Alguns dados não foram carregados corretamente.");
-            }
-        } catch (err) {
-            setError('Falha inesperada ao carregar os dados.');
+            setTerritories(t);
+            setRequests(r);
+            setUsers(u);
+        } catch (e) {
+            console.error("Erro ao carregar dados admin:", e);
         } finally {
             setLoading(false);
         }
     }, []);
 
-    useEffect(() => {
-        setLoading(true);
-        fetchData();
-    }, [fetchData]);
+    useEffect(() => { loadData(); }, [loadData]);
 
-    const handleConfirmAssignment = async (requestId: string, territoryId: string) => {
-        setActionLoading(requestId);
+    const handleFulfillRequest = async (requestId: string) => {
+        if (!selectedMapForRequest) return;
         try {
-            await assignTerritoryToRequest(requestId, territoryId);
-            await fetchData();
-        } catch (err) {
-            setError('Falha ao atribuir o território.');
-        } finally {
-            setAssigningRequest(null);
-            setActionLoading(null);
-        }
+            await assignTerritoryToRequest(requestId, selectedMapForRequest);
+            setFulfillingRequestId(null);
+            setSelectedMapForRequest('');
+            await loadData();
+        } catch (e: any) { alert(e.message); }
     };
 
-    const handleRejectRequest = async (requestId: string) => {
-        setActionLoading(requestId);
-        try {
-            await rejectRequest(requestId);
-            await fetchData();
-        } catch (err) {
-            setError('Falha ao rejeitar a solicitação.');
-        } finally {
-            setActionLoading(null);
-        }
+    const handleReject = async (id: string) => {
+        if (!confirm("Rejeitar esta solicitação?")) return;
+        await rejectRequest(id);
+        await loadData();
     };
 
-    const handleUpload = async (name: string, file: File) => {
-        setActionLoading('uploading');
-        setUploadError(null);
-
-        try {
-            await uploadTerritory(name, file);
-            await fetchData();
-            setIsUploadModalOpen(false);
-        } catch(err: any) {
-            setUploadError(err.message || "Ocorreu um erro desconhecido durante o upload.");
-        } finally {
-            setActionLoading(null);
-        }
-    };
-    
-    const openUploadModal = () => {
-        setUploadError(null);
-        setIsUploadModalOpen(true);
+    const handleDeleteTerritory = async (id: string) => {
+        if (!confirm("Tem certeza que deseja excluir este território?")) return;
+        await deleteTerritory(id);
+        await loadData();
     };
 
-    const handleUpdate = async (territoryId: string, data: { name: string, permanentNotes: string }) => {
-        try {
-            await updateTerritory(territoryId, data);
-            await fetchData();
-        } catch(err) {
-            setError("Falha ao atualizar o território.");
-        } finally {
-            setEditingTerritory(null);
-        }
-    };
-
-    const handleDelete = async () => {
-        if (!deletingTerritory) return;
-        setActionLoading(deletingTerritory.id);
-        try {
-            await deleteTerritory(deletingTerritory.id);
-            await fetchData();
-        } catch(err) {
-            setError("Falha ao excluir o território.");
-        } finally {
-            setDeletingTerritory(null);
-            setActionLoading(null);
-        }
-    };
-
-    const handleToggleUserRole = async (user: User) => {
-        if (user.id === currentUser?.id) {
-            alert("Você não pode alterar sua própria função.");
-            return;
-        }
-        setActionLoading(user.id);
+    const handlePromote = async (user: User) => {
         const newRole = user.role === 'admin' ? 'user' : 'admin';
-        try {
-            await updateUserRole(user.id, newRole);
-            await fetchData();
-        } catch (err) {
-            setError("Falha ao atualizar função do usuário.");
-        } finally {
-            setActionLoading(null);
-        }
+        await updateUserRole(user.id, newRole);
+        await loadData();
     };
 
-    const filteredTerritories = useMemo(() => {
-        return territories
-            .filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()))
-            .filter(t => statusFilter ? t.status === statusFilter : true);
-    }, [territories, searchTerm, statusFilter]);
+    const stats = useMemo(() => ({
+        total: territories.length,
+        available: territories.filter(t => t.status === TerritoryStatus.AVAILABLE).length,
+        inUse: territories.filter(t => t.status === TerritoryStatus.IN_USE).length,
+    }), [territories]);
 
-    const availableTerritoriesForAssignment = useMemo(() => {
-        return territories
-            .filter(t => t.status === TerritoryStatus.AVAILABLE)
-            .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-    }, [territories]);
+    const availableMaps = useMemo(() => territories.filter(t => t.status === TerritoryStatus.AVAILABLE), [territories]);
 
-    if (loading) {
-        return <div className="text-center p-10">Carregando dados do administrador...</div>;
-    }
-    
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center p-20 space-y-4">
+            <div className="animate-spin h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+            <p className="text-gray-500 font-bold">Carregando painel...</p>
+        </div>
+    );
+
     return (
-        <div className="container mx-auto">
-             {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6" role="alert">{error}</div>}
-            
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <h1 className="text-3xl font-bold text-gray-800">Painel do Administrador</h1>
-                
-                <div className="flex bg-gray-200 p-1 rounded-xl">
-                    <button 
-                        onClick={() => setActiveTab('territorios')}
-                        className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'territorios' ? 'bg-white text-blue-600 shadow' : 'text-gray-600 hover:text-gray-900'}`}
-                    >
-                        Territórios
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('usuarios')}
-                        className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'usuarios' ? 'bg-white text-blue-600 shadow' : 'text-gray-600 hover:text-gray-900'}`}
-                    >
-                        Usuários
-                    </button>
+        <div className="max-w-6xl mx-auto space-y-8 pb-20">
+            {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={loadData} />}
+            {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
+
+            {/* Cabeçalho */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                <div>
+                    <h1 className="text-4xl font-black text-gray-900 tracking-tight">Painel Admin</h1>
+                    <p className="text-gray-500 font-medium mt-1">Gestão de Congregação</p>
+                </div>
+                <div className="flex bg-gray-200/50 p-1.5 rounded-2xl">
+                    <button onClick={() => setActiveTab('territories')} className={`px-6 py-2.5 rounded-xl font-black transition-all ${activeTab === 'territories' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}`}>Mapas</button>
+                    <button onClick={() => setActiveTab('users')} className={`px-6 py-2.5 rounded-xl font-black transition-all ${activeTab === 'users' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}`}>Usuários</button>
                 </div>
             </div>
 
-            {activeTab === 'territorios' ? (
+            {activeTab === 'territories' ? (
                 <>
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-semibold text-gray-700">Gestão de Mapas</h2>
-                        <button onClick={openUploadModal} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition transform hover:scale-105">
-                            + Novo Território
-                        </button>
+                    {/* Estatísticas */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total</p>
+                            <p className="text-3xl font-black text-gray-900">{stats.total}</p>
+                        </div>
+                        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Livres</p>
+                            <p className="text-3xl font-black text-green-600">{stats.available}</p>
+                        </div>
+                        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Em Campo</p>
+                            <p className="text-3xl font-black text-blue-600">{stats.inUse}</p>
+                        </div>
                     </div>
-                    
-                    {isUploadModalOpen && <UploadTerritoryModal onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={actionLoading === 'uploading'} error={uploadError} />}
-                    {editingTerritory && <EditTerritoryModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={handleUpdate} />}
-                    {viewingHistory && <TerritoryHistoryModal territory={viewingHistory} onClose={() => setViewingHistory(null)} />}
-                    {assigningRequest && <AssignTerritoryModal 
-                        request={assigningRequest}
-                        availableTerritories={availableTerritoriesForAssignment}
-                        onClose={() => setAssigningRequest(null)}
-                        onConfirm={handleConfirmAssignment}
-                    />}
-                    {deletingTerritory && <ConfirmationModal 
-                        title="Excluir Território"
-                        message={`Tem certeza que deseja excluir o território "${deletingTerritory.name}"? Esta ação não pode ser desfeita.`}
-                        onClose={() => setDeletingTerritory(null)} 
-                        onConfirm={handleDelete}
-                        confirmText="Confirmar Exclusão"
-                        confirmButtonClass="bg-red-600 hover:bg-red-700"
-                    />}
 
-                    <StatisticsPanel territories={territories} />
-
-                    {/* Requests Section */}
-                    <section className="mb-8">
-                        <h2 className="text-2xl font-semibold text-gray-700 mb-4">Solicitações Pendentes ({requests.length})</h2>
-                        {requests.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Solicitações */}
+                    {requests.length > 0 && (
+                        <div className="bg-blue-600 rounded-3xl p-8 text-white shadow-xl shadow-blue-200">
+                            <h2 className="text-2xl font-black mb-6 flex items-center gap-3">
+                                <span className="flex h-8 w-8 bg-blue-400 rounded-full items-center justify-center text-sm">{requests.length}</span>
+                                Pedidos Pendentes
+                            </h2>
+                            <div className="space-y-4">
                                 {requests.map(req => (
-                                    <div key={req.id} className="bg-white p-5 rounded-lg shadow-md border-l-4 border-yellow-500">
-                                        <h3 className="font-bold text-lg">Solicitação de Território</h3>
-                                        <p className="text-sm text-gray-600">De: {req.userName}</p>
-                                        <p className="text-sm text-gray-500">Data: {formatDate(req.requestDate)}</p>
-                                        <div className="mt-4 flex gap-4">
-                                            <button onClick={() => setAssigningRequest(req)} disabled={actionLoading === req.id || availableTerritoriesForAssignment.length === 0} className="bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded text-sm w-full disabled:bg-green-300 disabled:cursor-not-allowed">
-                                                {actionLoading === req.id ? '...' : 'Atender'}
-                                            </button>
-                                            <button onClick={() => handleRejectRequest(req.id)} disabled={actionLoading === req.id} className="bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded text-sm w-full disabled:bg-red-300">
-                                                {actionLoading === req.id ? '...' : 'Rejeitar'}
-                                            </button>
+                                    <div key={req.id} className="bg-blue-700/50 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-6">
+                                        <div className="text-center md:text-left">
+                                            <p className="font-black text-xl">{req.userName}</p>
+                                            <p className="text-blue-200 text-sm font-bold uppercase">{formatDate(req.requestDate)}</p>
                                         </div>
-                                        {availableTerritoriesForAssignment.length === 0 && <p className="text-xs text-center mt-2 text-red-600">Nenhum território disponível para atribuir.</p>}
+                                        
+                                        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+                                            {fulfillingRequestId === req.id ? (
+                                                <div className="flex gap-2">
+                                                    <select 
+                                                        value={selectedMapForRequest} 
+                                                        onChange={e => setSelectedMapForRequest(e.target.value)}
+                                                        className="bg-white text-gray-900 px-4 py-2 rounded-xl font-bold outline-none"
+                                                    >
+                                                        <option value="">Escolha um mapa...</option>
+                                                        {availableMaps.map(m => (
+                                                            <option key={m.id} value={m.id}>{m.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <button onClick={() => handleFulfillRequest(req.id)} disabled={!selectedMapForRequest} className="bg-green-500 p-2 rounded-xl">✓</button>
+                                                    <button onClick={() => setFulfillingRequestId(null)} className="bg-red-400 p-2 rounded-xl">✕</button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <button onClick={() => setFulfillingRequestId(req.id)} className="bg-white text-blue-700 px-6 py-3 rounded-xl font-black hover:bg-blue-50 transition-all">Atribuir Mapa</button>
+                                                    <button onClick={() => handleReject(req.id)} className="bg-blue-800 text-white px-6 py-3 rounded-xl font-black hover:bg-blue-900 transition-all">Recusar</button>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
-                        ) : (
-                            <p className="text-gray-500">Nenhuma solicitação pendente no momento.</p>
-                        )}
-                    </section>
+                        </div>
+                    )}
 
-                    {/* All Territories Section */}
-                    <section>
-                        <div className="mb-4">
-                            <h2 className="text-2xl font-semibold text-gray-700 mb-4">Todos os Territórios ({filteredTerritories.length})</h2>
-                            <div className="flex flex-col sm:flex-row gap-4">
-                                <input type="text" placeholder="Buscar por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-grow shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 bg-gray-50 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as TerritoryStatus | '')} className="shadow-sm appearance-none border rounded w-full sm:w-auto py-2 px-3 text-gray-700 bg-gray-50 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="">Todos os Status</option>
-                                    <option value={TerritoryStatus.AVAILABLE}>Disponível</option>
-                                    <option value={TerritoryStatus.IN_USE}>Em Uso</option>
-                                    <option value={TerritoryStatus.CLOSED}>Fechado</option>
-                                </select>
-                            </div>
+                    {/* Lista de Mapas */}
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                        <div className="p-8 border-b border-gray-50 flex justify-between items-center">
+                            <h2 className="text-2xl font-black text-gray-800">Todos os Territórios</h2>
+                            <button onClick={() => setShowAddModal(true)} className="bg-blue-600 text-white font-black py-2.5 px-6 rounded-xl hover:bg-blue-700 transition-all">+ Novo</button>
                         </div>
-                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {filteredTerritories.map(t => {
-                                const colorInfo = getDeadlineColorInfo(t.dueDate);
-                                return (
-                                    <div key={t.id} className="bg-white rounded-lg shadow-lg overflow-hidden flex flex-col justify-between transform hover:-translate-y-1 transition-transform duration-300">
-                                        <div>
-                                            <div className={`p-5 ${t.status === TerritoryStatus.IN_USE ? colorInfo.bgColor : 'bg-gray-200'}`}>
-                                                <h3 className={`font-bold text-xl ${t.status === TerritoryStatus.IN_USE ? colorInfo.textColor : 'text-gray-800'}`}>{t.name}</h3>
-                                            </div>
-                                            <div className="p-5 space-y-3 text-sm">
-                                                <p><strong>Status:</strong> <span className="font-semibold capitalize">{t.status.replace('_', ' ')}</span></p>
-                                                {t.status === TerritoryStatus.IN_USE && t.assignedToName && (
-                                                    <>
-                                                        <p><strong>Publicador:</strong> {t.assignedToName}</p>
-                                                        <p><strong>Data de Vencimento:</strong> {formatDate(t.dueDate)}</p>
-                                                        <p className={`text-xs font-bold ${colorInfo.textColor.replace('text-white', 'text-gray-800').replace('text-gray-800', 'text-current')}`}>{colorInfo.label}</p>
-                                                    </>
-                                                )}
-                                                {t.status === TerritoryStatus.CLOSED && t.history.length > 0 && (
-                                                    <p className="text-gray-600 font-semibold">Fechado em {formatDate(t.history[t.history.length-1]?.completedDate)}</p>
-                                                )}
-                                                 {t.permanentNotes && <p className="text-xs text-yellow-800 bg-yellow-100 p-2 rounded-md"><strong>Nota Permanente:</strong> {t.permanentNotes}</p>}
-                                            </div>
-                                        </div>
-                                        <div className="px-5 pb-4 mt-2 border-t pt-3 flex justify-end gap-4">
-                                            <button onClick={() => setViewingHistory(t)} className="text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors">Histórico</button>
-                                            <button onClick={() => setEditingTerritory(t)} className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">Editar</button>
-                                            <button onClick={() => setDeletingTerritory(t)} disabled={t.status !== TerritoryStatus.AVAILABLE && t.status !== TerritoryStatus.CLOSED} className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors disabled:text-gray-400 disabled:cursor-not-allowed">Excluir</button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50 text-gray-400 text-xs font-bold uppercase tracking-widest">
+                                    <tr>
+                                        <th className="px-8 py-4">Nome</th>
+                                        <th className="px-8 py-4">Status</th>
+                                        <th className="px-8 py-4">Atribuído a</th>
+                                        <th className="px-8 py-4 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {territories.map(t => (
+                                        <tr key={t.id} className="hover:bg-gray-50/50 transition-colors">
+                                            <td className="px-8 py-6 font-black text-gray-800">{t.name}</td>
+                                            <td className="px-8 py-6">
+                                                <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${t.status === TerritoryStatus.AVAILABLE ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                    {t.status === TerritoryStatus.AVAILABLE ? 'Livre' : 'Em Campo'}
+                                                </span>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <p className="text-sm font-bold text-gray-700">{t.assignedToName || '-'}</p>
+                                                {t.assignmentDate && <p className="text-xs text-gray-400">{formatDate(t.assignmentDate)}</p>}
+                                            </td>
+                                            <td className="px-8 py-6 text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    <button onClick={() => setViewHistory(t)} className="p-2 text-gray-400 hover:text-blue-600 transition-all">Histórico</button>
+                                                    <button onClick={() => handleDeleteTerritory(t.id)} className="p-2 text-gray-400 hover:text-red-600 transition-all">Excluir</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
-                         {filteredTerritories.length === 0 && <p className="text-center text-gray-500 mt-8">Nenhum território encontrado com os filtros aplicados.</p>}
-                    </section>
+                    </div>
                 </>
             ) : (
-                <section className="bg-white rounded-xl shadow-lg overflow-hidden">
+                /* Aba de Usuários */
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="p-8 border-b border-gray-50">
+                        <h2 className="text-2xl font-black text-gray-800">Publicadores</h2>
+                    </div>
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50 text-gray-400 text-xs font-bold uppercase tracking-widest">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Usuário</th>
-                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">E-mail</th>
-                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Nível de Acesso</th>
-                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Ações</th>
+                                    <th className="px-8 py-4">Nome</th>
+                                    <th className="px-8 py-4">Cargo</th>
+                                    <th className="px-8 py-4">Cadastro</th>
+                                    <th className="px-8 py-4 text-right">Ações</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="divide-y divide-gray-50">
                                 {users.map(u => (
-                                    <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center">
-                                                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold mr-3">
-                                                    {u.name?.charAt(0).toUpperCase() || '?'}
-                                                </div>
-                                                <span className="text-sm font-medium text-gray-900">{u.name}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.email}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${u.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>
-                                                {u.role === 'admin' ? 'Administrador' : 'Publicador'}
+                                    <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
+                                        <td className="px-8 py-6 font-black text-gray-800">{u.name}</td>
+                                        <td className="px-8 py-6">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                {u.role}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <td className="px-8 py-6 text-sm text-gray-400">{formatDate(u.createdAt)}</td>
+                                        <td className="px-8 py-6 text-right">
                                             <button 
-                                                onClick={() => handleToggleUserRole(u)}
-                                                disabled={actionLoading === u.id || u.id === currentUser?.id}
-                                                className="text-blue-600 hover:text-blue-900 disabled:text-gray-300"
+                                                onClick={() => handlePromote(u)}
+                                                className="text-sm font-bold text-blue-600 hover:underline"
                                             >
-                                                {actionLoading === u.id ? '...' : u.role === 'admin' ? 'Tornar Publicador' : 'Tornar Administrador'}
+                                                Alterar Cargo
                                             </button>
                                         </td>
                                     </tr>
@@ -588,7 +349,7 @@ const AdminDashboard: React.FC = () => {
                             </tbody>
                         </table>
                     </div>
-                </section>
+                </div>
             )}
         </div>
     );

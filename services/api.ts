@@ -1,4 +1,3 @@
-
 import { 
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
@@ -60,7 +59,7 @@ export const apiLogin = async (email: string, pass: string): Promise<User> => {
         return { 
             ...data, 
             id: userDoc.id,
-            name: data.name || userCredential.user.displayName || email.split('@')[0] || 'Usuário',
+            name: data.name || data.nome || userCredential.user.displayName || email.split('@')[0] || 'Usuário',
             createdAt: data.createdAt?.toDate() || new Date()
         } as User;
     } catch (error) {
@@ -117,6 +116,7 @@ export const fetchAllTerritories = async (): Promise<Territory[]> => {
             return {
                 ...data,
                 id: doc.id,
+                name: data.name || 'Sem Nome',
                 createdAt: data.createdAt?.toDate() || new Date(),
                 assignmentDate: data.assignmentDate?.toDate() || null,
                 dueDate: data.dueDate?.toDate() || null,
@@ -127,33 +127,50 @@ export const fetchAllTerritories = async (): Promise<Territory[]> => {
             } as Territory;
         });
 
-        return list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+        return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true }));
     } catch (error) {
         console.error("Erro ao buscar territórios:", error);
         throw error;
     }
 };
 
+export const createTerritory = async (name: string, url: string): Promise<void> => {
+    try {
+        const newTerritory = {
+            name: name.trim(),
+            status: TerritoryStatus.AVAILABLE,
+            pdfUrl: url,
+            createdAt: Timestamp.now(),
+            history: [],
+            permanentNotes: '',
+            assignedTo: null,
+            assignedToName: null,
+            assignmentDate: null,
+            dueDate: null
+        };
+        await addDoc(collection(db, 'territories'), newTerritory);
+    } catch (error) {
+        console.error("Erro ao criar território:", error);
+        throw error;
+    }
+};
+
 export const uploadTerritory = async (name: string, file: File): Promise<void> => {
-    const fileName = `${Date.now()}_${file.name}`;
-    const storageRef = ref(storage, `maps/${fileName}`);
-    const snapshot = await uploadBytes(storageRef, file);
-    const pdfUrl = await getDownloadURL(snapshot.ref);
-    
-    const newTerritory = {
-        name,
-        status: TerritoryStatus.AVAILABLE,
-        pdfUrl,
-        createdAt: Timestamp.now(),
-        history: [],
-        permanentNotes: '',
-        assignedTo: null,
-        assignedToName: null,
-        assignmentDate: null,
-        dueDate: null
-    };
-    
-    await addDoc(collection(db, 'territories'), newTerritory);
+    try {
+        const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+        const storageRef = ref(storage, `maps/${fileName}`);
+        
+        // Detecta o mimeType real do arquivo (pode ser PDF ou Imagem)
+        const metadata = { contentType: file.type || 'application/pdf' };
+        
+        const snapshot = await uploadBytes(storageRef, file, metadata);
+        const fileUrl = await getDownloadURL(snapshot.ref);
+        
+        await createTerritory(name, fileUrl);
+    } catch (error: any) {
+        console.error("Erro detalhado no upload:", error);
+        throw new Error("Erro ao salvar arquivo. Verifique se você é Admin ou se o arquivo é PDF/Imagem.");
+    }
 };
 
 export const updateTerritory = async (territoryId: string, data: Partial<Territory>): Promise<void> => {
@@ -166,30 +183,53 @@ export const deleteTerritory = async (territoryId: string): Promise<void> => {
     const territoryDoc = await getDoc(docRef);
     if (territoryDoc.exists()) {
         const data = territoryDoc.data();
-        if (data.pdfUrl) {
+        if (data.pdfUrl && data.pdfUrl.includes('firebasestorage')) {
             try {
                 const fileRef = ref(storage, data.pdfUrl);
                 await deleteObject(fileRef);
-            } catch (e) { console.error("Erro ao deletar arquivo:", e); }
+            } catch (e) { console.error("Erro ao deletar arquivo do storage:", e); }
         }
     }
     await deleteDoc(docRef);
 };
 
-// --- REQUESTS & ASSIGNMENT ---
+// --- USER MANAGEMENT ---
+
+export const fetchAllUsers = async (): Promise<User[]> => {
+    try {
+        const querySnapshot = await getDocs(collection(db, 'users'));
+        const list = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return { 
+                ...data, 
+                id: doc.id,
+                name: data.name || data.nome || data.email?.split('@')[0] || 'Sem Nome',
+                createdAt: data.createdAt?.toDate() || new Date()
+            } as User;
+        });
+
+        return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    } catch (error) {
+        console.error("Erro ao buscar usuários:", error);
+        throw error;
+    }
+};
+
+export const updateUserRole = async (userId: string, role: 'admin' | 'user'): Promise<void> => {
+    await updateDoc(doc(db, 'users', userId), { role });
+};
+
+// --- OUTRAS FUNÇÕES ---
 
 export const fetchAllRequests = async (): Promise<TerritoryRequest[]> => {
     try {
-        // Query simples para evitar erros de índice composto
         const q = query(collection(db, 'requests'), where('status', '==', RequestStatus.PENDING));
         const querySnapshot = await getDocs(q);
-        const list = querySnapshot.docs.map(doc => ({
+        return querySnapshot.docs.map(doc => ({
             ...doc.data(),
             id: doc.id,
             requestDate: doc.data().requestDate?.toDate() || new Date()
-        } as TerritoryRequest));
-
-        return list.sort((a, b) => b.requestDate.getTime() - a.requestDate.getTime());
+        } as TerritoryRequest)).sort((a, b) => b.requestDate.getTime() - a.requestDate.getTime());
     } catch (error) {
         console.error("Erro ao buscar solicitações:", error);
         throw error;
@@ -197,37 +237,26 @@ export const fetchAllRequests = async (): Promise<TerritoryRequest[]> => {
 };
 
 export const requestTerritory = async (user: User): Promise<void> => {
-    try {
-        const q = query(collection(db, 'requests'), 
-            where('userId', '==', user.id), 
-            where('status', '==', RequestStatus.PENDING)
-        );
-        const existing = await getDocs(q);
-        if (!existing.empty) throw new Error("Você já possui uma solicitação pendente.");
+    const q = query(collection(db, 'requests'), where('userId', '==', user.id), where('status', '==', RequestStatus.PENDING));
+    const existing = await getDocs(q);
+    if (!existing.empty) throw new Error("Você já possui uma solicitação pendente.");
 
-        const safeName = user.name || user.email.split('@')[0] || 'Publicador';
-
-        await addDoc(collection(db, 'requests'), {
-            userId: user.id,
-            userName: safeName,
-            requestDate: Timestamp.now(),
-            status: RequestStatus.PENDING
-        });
-    } catch (error) {
-        console.error("Erro ao solicitar território:", error);
-        throw error;
-    }
+    await addDoc(collection(db, 'requests'), {
+        userId: user.id,
+        userName: user.name || 'Publicador',
+        requestDate: Timestamp.now(),
+        status: RequestStatus.PENDING
+    });
 };
 
 export const assignTerritoryToRequest = async (requestId: string, territoryId: string): Promise<void> => {
     await runTransaction(db, async (transaction) => {
         const requestRef = doc(db, 'requests', requestId);
         const territoryRef = doc(db, 'territories', territoryId);
-        
         const requestDoc = await transaction.get(requestRef);
         const territoryDoc = await transaction.get(territoryRef);
         
-        if (!requestDoc.exists() || !territoryDoc.exists()) throw new Error("Documento não encontrado.");
+        if (!requestDoc.exists() || !territoryDoc.exists()) throw new Error("Erro de dados.");
         
         const reqData = requestDoc.data();
         const dueDate = new Date();
@@ -236,17 +265,16 @@ export const assignTerritoryToRequest = async (requestId: string, territoryId: s
         transaction.update(territoryRef, {
             status: TerritoryStatus.IN_USE,
             assignedTo: reqData.userId,
-            assignedToName: reqData.userName || 'Publicador',
+            assignedToName: reqData.userName,
             assignmentDate: Timestamp.now(),
             dueDate: Timestamp.fromDate(dueDate)
         });
-        
         transaction.update(requestRef, { status: RequestStatus.APPROVED });
         
         const notifRef = doc(collection(db, 'notifications'));
         transaction.set(notifRef, {
             userId: reqData.userId,
-            message: `O território "${territoryDoc.data().name}" foi atribuído a você.`,
+            message: `Território ${territoryDoc.data().name} atribuído.`,
             type: 'success',
             read: false,
             createdAt: Timestamp.now()
@@ -260,14 +288,12 @@ export const rejectRequest = async (requestId: string): Promise<void> => {
 
 export const submitReport = async (user: User, territory: Territory, notes: string): Promise<void> => {
     const territoryRef = doc(db, 'territories', territory.id);
-    
     const historyEntry = {
         userId: user.id,
-        userName: user.name || 'Publicador',
+        userName: user.name,
         completedDate: Timestamp.now(),
         notes
     };
-
     await updateDoc(territoryRef, {
         status: TerritoryStatus.AVAILABLE,
         assignedTo: null,
@@ -278,51 +304,14 @@ export const submitReport = async (user: User, territory: Territory, notes: stri
     });
 };
 
-// --- USER MANAGEMENT ---
-
-export const fetchAllUsers = async (): Promise<User[]> => {
-    try {
-        const querySnapshot = await getDocs(collection(db, 'users'));
-        const list = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            return { 
-                ...data, 
-                id: doc.id,
-                createdAt: data.createdAt?.toDate() || new Date()
-            } as User;
-        });
-
-        return list.sort((a, b) => a.name.localeCompare(b.name));
-    } catch (error) {
-        console.error("Erro ao buscar usuários:", error);
-        throw error;
-    }
-};
-
-export const updateUserRole = async (userId: string, role: 'admin' | 'user'): Promise<void> => {
-    await updateDoc(doc(db, 'users', userId), { role });
-};
-
-// --- NOTIFICATIONS ---
-
 export const fetchNotifications = async (user: User): Promise<Notification[]> => {
-    try {
-        const q = query(
-            collection(db, 'notifications'), 
-            where('userId', '==', user.id)
-        );
-        const querySnapshot = await getDocs(q);
-        const list = querySnapshot.docs.map(doc => ({
-            ...doc.data(),
-            id: doc.id,
-            createdAt: doc.data().createdAt?.toDate() || new Date()
-        } as Notification));
-
-        return list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 20);
-    } catch (error) {
-        console.error("Erro ao buscar notificações:", error);
-        throw error;
-    }
+    const q = query(collection(db, 'notifications'), where('userId', '==', user.id));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id,
+        createdAt: doc.data().createdAt?.toDate() || new Date()
+    } as Notification)).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 20);
 };
 
 export const markNotificationsAsRead = async (ids: string[]): Promise<void> => {
@@ -332,26 +321,21 @@ export const markNotificationsAsRead = async (ids: string[]): Promise<void> => {
 };
 
 export const fetchPublisherData = async (userId: string): Promise<{ myTerritory: Territory | null, hasPendingRequest: boolean }> => {
-    try {
-        const territoriesQ = query(collection(db, 'territories'), where('assignedTo', '==', userId), where('status', '==', TerritoryStatus.IN_USE));
-        const territorySnapshot = await getDocs(territoriesQ);
-        const myTerritory = !territorySnapshot.empty ? { 
-            ...territorySnapshot.docs[0].data(), 
-            id: territorySnapshot.docs[0].id,
-            dueDate: territorySnapshot.docs[0].data().dueDate?.toDate() || null,
-            assignmentDate: territorySnapshot.docs[0].data().assignmentDate?.toDate() || null,
-            history: (territorySnapshot.docs[0].data().history || []).map((h:any) => ({
-                ...h, 
-                completedDate: h.completedDate?.toDate() || new Date()
-            }))
-        } as Territory : null;
-        
-        const requestQ = query(collection(db, 'requests'), where('userId', '==', userId), where('status', '==', RequestStatus.PENDING));
-        const requestSnapshot = await getDocs(requestQ);
-        
-        return { myTerritory, hasPendingRequest: !requestSnapshot.empty };
-    } catch (error) {
-        console.error("Erro ao buscar dados do publicador:", error);
-        throw error;
-    }
+    const territoriesQ = query(collection(db, 'territories'), where('assignedTo', '==', userId), where('status', '==', TerritoryStatus.IN_USE));
+    const territorySnapshot = await getDocs(territoriesQ);
+    const myTerritory = !territorySnapshot.empty ? { 
+        ...territorySnapshot.docs[0].data(), 
+        id: territorySnapshot.docs[0].id,
+        dueDate: territorySnapshot.docs[0].data().dueDate?.toDate() || null,
+        assignmentDate: territorySnapshot.docs[0].data().assignmentDate?.toDate() || null,
+        history: (territorySnapshot.docs[0].data().history || []).map((h:any) => ({
+            ...h, 
+            completedDate: h.completedDate?.toDate() || new Date()
+        }))
+    } as Territory : null;
+    
+    const requestQ = query(collection(db, 'requests'), where('userId', '==', userId), where('status', '==', RequestStatus.PENDING));
+    const requestSnapshot = await getDocs(requestQ);
+    
+    return { myTerritory, hasPendingRequest: !requestSnapshot.empty };
 };

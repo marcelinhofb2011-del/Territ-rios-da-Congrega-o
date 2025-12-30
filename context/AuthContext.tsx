@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { User } from '../types';
 import { apiLogin, apiLogout, apiSignUp } from '../services/api';
@@ -24,38 +25,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (firebaseUser) {
         setLoading(true);
         try {
-          // Busca o perfil
           let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           
-          // Se não existir (pode ser delay no cadastro), espera um pouco mais
+          // Retry logic caso o documento demore a ser criado após o cadastro
           if (!userDoc.exists()) {
-             await new Promise(r => setTimeout(r, 1500));
+             await new Promise(r => setTimeout(r, 1000));
              userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           }
 
           if (userDoc.exists()) {
-            setUser({ ...userDoc.data(), id: userDoc.id } as User);
+            const data = userDoc.data();
+            setUser({ 
+                ...data, 
+                id: userDoc.id,
+                name: data.name || data.nome || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário'
+            } as User);
           } else {
-            // Último recurso: se o doc não existe, mas está logado, 
-            // checamos se é o primeiro usuário do banco para atribuir Admin
-            const usersSnap = await getDocs(collection(db, 'users'));
-            const isFirst = usersSnap.empty;
-            
+            // Se o documento realmente não existir, tenta criar um perfil básico de leitura
             const fallback: User = {
               id: firebaseUser.uid,
-              // Add missing required User properties
               uid: firebaseUser.uid,
-              name: firebaseUser.displayName || 'Usuário',
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário',
               email: firebaseUser.email || '',
-              // Fix: Type '"publicador"' is not assignable to type '"user" | "admin"'.
-              role: isFirst ? 'admin' : 'user',
+              role: 'user',
               active: true,
               createdAt: new Date()
             };
             setUser(fallback);
           }
         } catch (error) {
-          console.error("Erro ao carregar perfil:", error);
+          console.error("Erro crítico ao carregar perfil:", error);
         } finally {
           setLoading(false);
         }
@@ -73,6 +72,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const userData = await apiLogin(email, pass);
         setUser(userData);
+    } catch (e) {
+        throw e;
     } finally {
         setLoading(false);
     }
@@ -88,6 +89,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const userData = await apiSignUp(name, email, pass);
         setUser(userData);
+    } catch (e) {
+        throw e;
     } finally {
         setLoading(false);
     }

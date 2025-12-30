@@ -2,14 +2,16 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /maps/{allPaths=**} {
-      // Qualquer usuário autenticado pode baixar os mapas (PDFs)
+      // Qualquer usuário autenticado pode ver os mapas
       allow read: if request.auth != null;
       
-      // Apenas admins podem fazer upload ou deletar. 
-      // Validamos o role consultando o Firestore.
+      // Apenas administradores podem fazer upload ou deletar.
+      // Aceita PDF, JPEG e PNG.
       allow write: if request.auth != null && 
         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin' &&
-        (request.resource == null || request.resource.contentType == 'application/pdf');
+        (request.resource == null || 
+         request.resource.contentType == 'application/pdf' || 
+         request.resource.contentType.matches('image/.*'));
     }
   }
 }

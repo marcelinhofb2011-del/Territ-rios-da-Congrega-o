@@ -3,12 +3,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Função auxiliar para verificar se está logado
+    // Verifica se o usuário está autenticado
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Função para verificar se o usuário é admin (buscando no doc de usuários)
+    // Verifica se o usuário logado tem a role 'admin' no Firestore
     function isAdmin() {
       return isSignedIn() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
@@ -16,7 +16,7 @@ service cloud.firestore {
 
     // Regras para Usuários
     match /users/{userId} {
-      allow read: if isSignedIn(); 
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
       allow delete: if isAdmin();
@@ -28,9 +28,8 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Regras para Solicitações
+    // Regras para Solicitações (Requests)
     match /requests/{requestId} {
-      // Admins podem ler e escrever tudo. Usuários podem criar e ler as suas próprias.
       allow read: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
       allow create: if isSignedIn();
       allow update, delete: if isAdmin();
