@@ -82,8 +82,8 @@ const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ 
                     </div>
                     
                     <div className="flex p-1 bg-gray-100 rounded-xl">
-                        <button type="button" onClick={() => setMode('file')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${mode === 'file' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-50'}`}>Arquivo</button>
-                        <button type="button" onClick={() => setMode('link')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${mode === 'link' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-50'}`}>Link Externo</button>
+                        <button type="button" onClick={() => setMode('file')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${mode === 'file' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>Arquivo</button>
+                        <button type="button" onClick={() => setMode('link')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${mode === 'link' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>Link Externo</button>
                     </div>
 
                     {mode === 'file' ? (

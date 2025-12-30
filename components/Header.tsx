@@ -65,7 +65,9 @@ const Header: React.FC = () => {
     <header className="bg-white border-b border-gray-100 sticky top-0 z-40 backdrop-blur-md bg-white/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img src="map-icon.svg" alt="Logo" className="w-10 h-10 shadow-lg rounded-xl" />
+          <div className="text-4xl shadow-sm bg-blue-50 w-12 h-12 flex items-center justify-center rounded-2xl border border-blue-100">
+             🗺️
+          </div>
           <div>
             <h1 className="text-xl font-black text-gray-900 tracking-tight leading-none">territorio</h1>
             <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1">Congregação</p>

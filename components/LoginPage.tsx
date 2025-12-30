@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -57,15 +56,9 @@ const LoginPage: React.FC = () => {
         <div className="w-full max-w-sm mx-auto lg:w-96">
           <div className="text-center lg:text-left">
             <div className="mb-8 lg:hidden flex justify-center">
-              <img 
-                src="map-icon.svg" 
-                alt="Logo" 
-                className="w-24 h-24 drop-shadow-2xl"
-                onError={(e) => {
-                  // Fallback caso o navegador tenha problemas com o arquivo local temporariamente
-                  (e.target as HTMLImageElement).src = 'https://api.iconify.design/material-symbols:map-outline.svg?color=%231e40af';
-                }}
-              />
+              <div className="text-8xl p-8 bg-blue-50 rounded-[3rem] border-4 border-blue-100 shadow-2xl">
+                 🗺️
+              </div>
             </div>
             <h2 className="text-3xl font-black text-gray-900 tracking-tight">
               {isLogin ? 'Bem-vindo' : 'Crie sua conta'}
@@ -153,7 +146,7 @@ const LoginPage: React.FC = () => {
           </div>
           
           <div className="mt-12 text-center lg:text-left text-xs font-bold text-gray-300 tracking-widest uppercase">
-            territorio v1.6
+            territorio v1.7
           </div>
         </div>
       </div>
@@ -161,8 +154,8 @@ const LoginPage: React.FC = () => {
       {/* Direita: Ilustração */}
       <div className="hidden lg:block relative flex-1 w-0">
         <div className="absolute inset-0 bg-blue-600 flex items-center justify-center overflow-hidden">
-          <div className="relative w-full max-w-lg animate-pulse-slow p-12">
-             <img src="map-icon.svg" alt="Ícone de Mapa" className="w-full drop-shadow-[0_35px_35px_rgba(0,0,0,0.4)]" />
+          <div className="relative w-full max-w-lg animate-pulse-slow p-12 text-[20rem] text-center filter drop-shadow-2xl">
+             🗺️
           </div>
           
           <div className="absolute bottom-12 left-12 right-12 text-white">
