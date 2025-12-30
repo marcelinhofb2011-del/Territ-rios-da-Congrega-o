@@ -1,10 +1,9 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { User } from '../types';
-import { apiLogin, apiLogout, apiSignUp, saveFCMToken } from '../services/api';
-import { auth, db, messaging } from '../firebase/config';
+import { apiLogin, apiLogout, apiSignUp } from '../services/api';
+import { auth, db } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { getToken } from 'firebase/messaging';
 
 interface AuthContextType {
   user: User | null;
@@ -19,27 +18,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Função para configurar notificações Push
-  const setupNotifications = async (userId: string) => {
-    try {
-      const msg = await messaging();
-      if (!msg) return;
-
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        const token = await getToken(msg, {
-          // Substitua pela sua PUBLIC VAPID KEY do Firebase Console
-          vapidKey: 'SUA_CHAVE_VAPID_AQUI' 
-        });
-        if (token) {
-          await saveFCMToken(userId, token);
-        }
-      }
-    } catch (error) {
-      console.warn("Não foi possível registrar notificações Push:", error);
-    }
-  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -61,7 +39,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 name: data.name || data.nome || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário'
             } as User;
             setUser(loggedUser);
-            setupNotifications(loggedUser.id);
           } else {
             const fallback: User = {
               id: firebaseUser.uid,
@@ -93,7 +70,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const userData = await apiLogin(email, pass);
         setUser(userData);
-        await setupNotifications(userData.id);
     } catch (e) {
         throw e;
     } finally {
@@ -111,7 +87,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const userData = await apiSignUp(name, email, pass);
         setUser(userData);
-        await setupNotifications(userData.id);
     } catch (e) {
         throw e;
     } finally {
