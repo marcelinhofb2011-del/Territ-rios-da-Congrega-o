@@ -1,5 +1,4 @@
 
-
 export enum TerritoryStatus {
   AVAILABLE = 'disponivel',
   REQUESTED = 'solicitado',
@@ -8,10 +7,13 @@ export enum TerritoryStatus {
 }
 
 export interface User {
-  id: string; // This will be the UID from Firebase Auth
+  id: string; // Document ID (mesmo que uid)
+  uid: string;
   email: string;
   name: string;
-  role: 'admin' | 'publicador';
+  role: 'admin' | 'user';
+  active: boolean;
+  createdAt: Date;
 }
 
 export interface TerritoryHistory {
@@ -47,16 +49,6 @@ export interface TerritoryRequest {
     userName: string;
     requestDate: Date;
     status: RequestStatus;
-}
-
-export interface Report {
-    id: string;
-    territoryId: string;
-    territoryName: string;
-    userId: string;
-    userName: string;
-    reportDate: Date;
-    notes: string;
 }
 
 export interface Notification {

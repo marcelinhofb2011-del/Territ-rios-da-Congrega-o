@@ -28,59 +28,73 @@ import {
     deleteObject 
 } from 'firebase/storage';
 import { auth, db, storage } from '../firebase/config';
-import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, Notification, TerritoryHistory } from '../types';
+import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, Notification } from '../types';
 
 // --- AUTH FUNCTIONS ---
 
 export const apiLogin = async (email: string, pass: string): Promise<User> => {
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-    const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+    const userId = userCredential.user.uid;
+    
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
     
     if (!userDoc.exists()) {
-        // Se o usuário existe no Auth mas não no Firestore, criamos um perfil padrão
-        const fallbackUser: User = {
-            id: userCredential.user.uid,
-            name: userCredential.user.displayName || 'Usuário',
+        const userData: User = {
+            id: userId,
+            uid: userId,
+            name: userCredential.user.displayName || email.split('@')[0] || 'Usuário',
             email: userCredential.user.email || email,
-            role: 'publicador'
+            role: 'user', 
+            active: true,
+            createdAt: new Date()
         };
-        await setDoc(doc(db, 'users', userCredential.user.uid), fallbackUser);
-        return fallbackUser;
+        await setDoc(userRef, {
+            ...userData,
+            createdAt: Timestamp.fromDate(userData.createdAt)
+        });
+        return userData;
     }
-    return { ...userDoc.data(), id: userDoc.id } as User;
+    
+    const data = userDoc.data();
+    return { 
+        ...data, 
+        id: userDoc.id,
+        // Garante que o nome nunca seja undefined ao carregar do banco
+        name: data.name || userCredential.user.displayName || email.split('@')[0] || 'Usuário',
+        createdAt: data.createdAt?.toDate() || new Date()
+    } as User;
 };
 
 export const apiSignUp = async (name: string, email: string, pass: string): Promise<User> => {
-    // 1. Criar no Firebase Auth
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     const userId = userCredential.user.uid;
 
-    // Atualizar o nome no perfil do Firebase Auth também
     await updateProfile(userCredential.user, { displayName: name });
     
-    // 2. Determinar o cargo (Admin se for o primeiro, senão Publicador)
-    let role: 'admin' | 'publicador' = 'publicador';
+    let isFirstUser = false;
     try {
-        // Tentamos ver se há outros usuários. Se falhar por regras, assumimos que não somos admin
-        // ou que as regras estão protegendo a coleção.
         const usersSnapshot = await getDocs(query(collection(db, 'users'), limit(1)));
-        if (usersSnapshot.empty) {
-            role = 'admin';
-        }
+        isFirstUser = usersSnapshot.empty;
     } catch (e) {
-        console.warn("Não foi possível verificar outros usuários, definindo como publicador por segurança.");
-        role = 'publicador';
+        console.warn("Não foi possível verificar primeiro usuário.");
     }
     
     const newUser: User = {
         id: userId,
-        name,
-        email,
-        role
+        uid: userId,
+        name: name || 'Usuário',
+        email: email,
+        role: isFirstUser ? 'admin' : 'user', 
+        active: true,
+        createdAt: new Date()
     };
     
-    // 3. Salvar no Firestore
-    await setDoc(doc(db, 'users', userId), newUser);
+    await setDoc(doc(db, 'users', userId), {
+        ...newUser,
+        createdAt: Timestamp.fromDate(newUser.createdAt)
+    });
+    
     return newUser;
 };
 
@@ -171,9 +185,12 @@ export const requestTerritory = async (user: User): Promise<void> => {
     const existing = await getDocs(q);
     if (!existing.empty) throw new Error("Você já possui uma solicitação pendente.");
 
+    // CORREÇÃO: Fallback agressivo para evitar o erro de undefined no Firestore
+    const safeName = user.name || user.email.split('@')[0] || 'Publicador';
+
     await addDoc(collection(db, 'requests'), {
         userId: user.id,
-        userName: user.name,
+        userName: safeName,
         requestDate: Timestamp.now(),
         status: RequestStatus.PENDING
     });
@@ -191,12 +208,12 @@ export const assignTerritoryToRequest = async (requestId: string, territoryId: s
         
         const reqData = requestDoc.data();
         const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 30); // 30 dias de prazo
+        dueDate.setDate(dueDate.getDate() + 30); 
 
         transaction.update(territoryRef, {
             status: TerritoryStatus.IN_USE,
             assignedTo: reqData.userId,
-            assignedToName: reqData.userName,
+            assignedToName: reqData.userName || 'Publicador',
             assignmentDate: Timestamp.now(),
             dueDate: Timestamp.fromDate(dueDate)
         });
@@ -223,7 +240,7 @@ export const submitReport = async (user: User, territory: Territory, notes: stri
     
     const historyEntry = {
         userId: user.id,
-        userName: user.name,
+        userName: user.name || 'Publicador',
         completedDate: Timestamp.now(),
         notes
     };
@@ -242,17 +259,29 @@ export const submitReport = async (user: User, territory: Territory, notes: stri
 
 export const fetchAllUsers = async (): Promise<User[]> => {
     const querySnapshot = await getDocs(query(collection(db, 'users'), orderBy('name', 'asc')));
-    return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
+    return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+            ...data, 
+            id: doc.id,
+            createdAt: data.createdAt?.toDate() || new Date()
+        } as User;
+    });
 };
 
-export const updateUserRole = async (userId: string, role: 'admin' | 'publicador'): Promise<void> => {
+export const updateUserRole = async (userId: string, role: 'admin' | 'user'): Promise<void> => {
     await updateDoc(doc(db, 'users', userId), { role });
 };
 
 // --- NOTIFICATIONS ---
 
 export const fetchNotifications = async (user: User): Promise<Notification[]> => {
-    const q = query(collection(db, 'notifications'), where('userId', '==', user.id), orderBy('createdAt', 'desc'), limit(20));
+    const q = query(
+        collection(db, 'notifications'), 
+        where('userId', '==', user.id), 
+        orderBy('createdAt', 'desc'), 
+        limit(20)
+    );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
         ...doc.data(),

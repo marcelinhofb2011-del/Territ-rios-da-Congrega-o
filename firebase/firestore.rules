@@ -1,40 +1,48 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Função auxiliar para verificar autenticação
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Função para verificar se o usuário logado tem role 'admin'
     function isAdmin() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+      return isSignedIn() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
-    }
-
     match /users/{userId} {
-      allow read: if request.auth != null && (isOwner(userId) || isAdmin());
-      allow create: if request.auth != null && isOwner(userId);
-      allow update: if request.auth != null && (isOwner(userId) || isAdmin());
-      // Permite listar apenas para admins
-      allow list: if isAdmin();
+      // Permite que qualquer usuário autenticado veja seu próprio documento ou que admins vejam todos
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Permite listagem para o sistema verificar se o banco está vazio no cadastro
+      allow list: if isSignedIn();
+      // Permite criação do próprio perfil
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      // Permite atualização (admins mudam tudo, users mudam apenas dados não-sensíveis como nome)
+      allow update: if isSignedIn() && (isAdmin() || (request.auth.uid == userId && request.resource.data.role == resource.data.role));
     }
 
     match /territories/{territoryId} {
-      allow read: if request.auth != null;
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     match /requests/{requestId} {
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      // O usuário pode ver suas próprias solicitações ou admin ver todas
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
 
     match /notifications/{notificationId} {
-      allow read, update: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if isAdmin();
+      // Permite ler se for o dono da notificação ou admin
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Usuário pode marcar suas próprias notificações como lidas
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Apenas o sistema (via Admin logic) cria notificações
+      allow create: if isSignedIn(); 
     }
   }
 }

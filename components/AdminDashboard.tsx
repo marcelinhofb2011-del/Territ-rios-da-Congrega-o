@@ -329,24 +329,9 @@ const AdminDashboard: React.FC = () => {
         setUploadError(null);
 
         try {
-            await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error("O upload demorou muito para responder. Isso geralmente é um problema de permissão no Supabase Storage. Verifique se as políticas de segurança do arquivo README.md foram aplicadas."));
-                }, 20000); // 20 second timeout
-
-                uploadTerritory(name, file)
-                    .then(() => {
-                        clearTimeout(timeout);
-                        resolve();
-                    })
-                    .catch(err => {
-                        clearTimeout(timeout);
-                        reject(err);
-                    });
-            });
-
+            await uploadTerritory(name, file);
             await fetchData();
-            setIsUploadModalOpen(false); // Close ONLY on success
+            setIsUploadModalOpen(false);
         } catch(err: any) {
             setUploadError(err.message || "Ocorreu um erro desconhecido durante o upload.");
         } finally {
@@ -355,7 +340,7 @@ const AdminDashboard: React.FC = () => {
     };
     
     const openUploadModal = () => {
-        setUploadError(null); // Reset error state when opening
+        setUploadError(null);
         setIsUploadModalOpen(true);
     };
 
@@ -390,7 +375,7 @@ const AdminDashboard: React.FC = () => {
             return;
         }
         setActionLoading(user.id);
-        const newRole = user.role === 'admin' ? 'publicador' : 'admin';
+        const newRole = user.role === 'admin' ? 'user' : 'admin';
         try {
             await updateUserRole(user.id, newRole);
             await fetchData();

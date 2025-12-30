@@ -21,11 +21,14 @@ const AppContent: React.FC = () => {
     return <LoginPage />;
   }
 
+  // Verificação de Role
+  const isAdmin = user.role === 'admin';
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
       <main className="p-4 sm:p-6 md:p-8">
-        {user.role === 'admin' ? (
+        {isAdmin ? (
           <AdminDashboard />
         ) : (
           <PublisherDashboard />
