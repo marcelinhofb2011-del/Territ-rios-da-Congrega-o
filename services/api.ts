@@ -1,8 +1,9 @@
+
 import { 
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
     signOut,
-    onAuthStateChanged
+    updateProfile
 } from 'firebase/auth';
 import { 
     doc, 
@@ -35,17 +36,41 @@ export const apiLogin = async (email: string, pass: string): Promise<User> => {
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
     const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
     
-    if (!userDoc.exists()) throw new Error("Perfil de usuário não encontrado.");
-    return userDoc.data() as User;
+    if (!userDoc.exists()) {
+        // Se o usuário existe no Auth mas não no Firestore, criamos um perfil padrão
+        const fallbackUser: User = {
+            id: userCredential.user.uid,
+            name: userCredential.user.displayName || 'Usuário',
+            email: userCredential.user.email || email,
+            role: 'publicador'
+        };
+        await setDoc(doc(db, 'users', userCredential.user.uid), fallbackUser);
+        return fallbackUser;
+    }
+    return { ...userDoc.data(), id: userDoc.id } as User;
 };
 
 export const apiSignUp = async (name: string, email: string, pass: string): Promise<User> => {
+    // 1. Criar no Firebase Auth
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     const userId = userCredential.user.uid;
+
+    // Atualizar o nome no perfil do Firebase Auth também
+    await updateProfile(userCredential.user, { displayName: name });
     
-    // O primeiro usuário a se cadastrar vira admin automaticamente
-    const usersSnapshot = await getDocs(query(collection(db, 'users'), limit(1)));
-    const role = usersSnapshot.empty ? 'admin' : 'publicador';
+    // 2. Determinar o cargo (Admin se for o primeiro, senão Publicador)
+    let role: 'admin' | 'publicador' = 'publicador';
+    try {
+        // Tentamos ver se há outros usuários. Se falhar por regras, assumimos que não somos admin
+        // ou que as regras estão protegendo a coleção.
+        const usersSnapshot = await getDocs(query(collection(db, 'users'), limit(1)));
+        if (usersSnapshot.empty) {
+            role = 'admin';
+        }
+    } catch (e) {
+        console.warn("Não foi possível verificar outros usuários, definindo como publicador por segurança.");
+        role = 'publicador';
+    }
     
     const newUser: User = {
         id: userId,
@@ -54,6 +79,7 @@ export const apiSignUp = async (name: string, email: string, pass: string): Prom
         role
     };
     
+    // 3. Salvar no Firestore
     await setDoc(doc(db, 'users', userId), newUser);
     return newUser;
 };
@@ -117,8 +143,6 @@ export const deleteTerritory = async (territoryId: string): Promise<void> => {
         const data = territoryDoc.data();
         if (data.pdfUrl) {
             try {
-                // Extrair path do URL para deletar se necessário, 
-                // ou apenas ignorar se for URL externa
                 const fileRef = ref(storage, data.pdfUrl);
                 await deleteObject(fileRef);
             } catch (e) { console.error("Erro ao deletar arquivo:", e); }
@@ -179,7 +203,6 @@ export const assignTerritoryToRequest = async (requestId: string, territoryId: s
         
         transaction.update(requestRef, { status: RequestStatus.APPROVED });
         
-        // Criar notificação para o usuário
         const notifRef = doc(collection(db, 'notifications'));
         transaction.set(notifRef, {
             userId: reqData.userId,
