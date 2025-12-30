@@ -1,10 +1,10 @@
-
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { User } from '../types';
-import { apiLogin, apiLogout, apiSignUp } from '../services/api';
-import { auth, db } from '../firebase/config';
+import { apiLogin, apiLogout, apiSignUp, saveFCMToken } from '../services/api';
+import { auth, db, messaging } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, getDocs, collection } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { getToken } from 'firebase/messaging';
 
 interface AuthContextType {
   user: User | null;
@@ -20,6 +20,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Função para configurar notificações Push
+  const setupNotifications = async (userId: string) => {
+    try {
+      const msg = await messaging();
+      if (!msg) return;
+
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        const token = await getToken(msg, {
+          // Substitua pela sua PUBLIC VAPID KEY do Firebase Console
+          vapidKey: 'SUA_CHAVE_VAPID_AQUI' 
+        });
+        if (token) {
+          await saveFCMToken(userId, token);
+        }
+      }
+    } catch (error) {
+      console.warn("Não foi possível registrar notificações Push:", error);
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -27,7 +48,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
           let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           
-          // Retry logic caso o documento demore a ser criado após o cadastro
           if (!userDoc.exists()) {
              await new Promise(r => setTimeout(r, 1000));
              userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
@@ -35,13 +55,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           if (userDoc.exists()) {
             const data = userDoc.data();
-            setUser({ 
+            const loggedUser = { 
                 ...data, 
                 id: userDoc.id,
                 name: data.name || data.nome || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário'
-            } as User);
+            } as User;
+            setUser(loggedUser);
+            setupNotifications(loggedUser.id);
           } else {
-            // Se o documento realmente não existir, tenta criar um perfil básico de leitura
             const fallback: User = {
               id: firebaseUser.uid,
               uid: firebaseUser.uid,
@@ -72,6 +93,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const userData = await apiLogin(email, pass);
         setUser(userData);
+        await setupNotifications(userData.id);
     } catch (e) {
         throw e;
     } finally {
@@ -89,6 +111,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const userData = await apiSignUp(name, email, pass);
         setUser(userData);
+        await setupNotifications(userData.id);
     } catch (e) {
         throw e;
     } finally {

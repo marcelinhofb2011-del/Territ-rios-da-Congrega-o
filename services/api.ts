@@ -17,7 +17,8 @@ import {
     addDoc, 
     Timestamp,
     runTransaction,
-    limit
+    limit,
+    arrayUnion
 } from 'firebase/firestore';
 import { 
     ref, 
@@ -29,6 +30,13 @@ import { auth, db, storage } from '../firebase/config';
 import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, Notification } from '../types';
 
 // --- AUTH FUNCTIONS ---
+
+export const saveFCMToken = async (userId: string, token: string) => {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+        fcmTokens: arrayUnion(token)
+    });
+};
 
 export const apiLogin = async (email: string, pass: string): Promise<User> => {
     try {
@@ -299,7 +307,6 @@ export const submitReport = async (user: User, territory: Territory, notes: stri
         notes: notes.trim()
     };
 
-    // Converter datas existentes do histórico para Timestamp para evitar erro de tipo no updateDoc
     const currentHistory = (territory.history || []).map(h => ({
         ...h,
         completedDate: Timestamp.fromDate(h.completedDate instanceof Date ? h.completedDate : new Date(h.completedDate))
