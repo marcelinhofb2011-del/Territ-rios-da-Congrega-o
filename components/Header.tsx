@@ -94,11 +94,23 @@ const Header: React.FC = () => {
     <header className="bg-white shadow-md border-b border-gray-100">
       <div className="container mx-auto px-4 sm:px-6 md:px-8 py-3 flex justify-between items-center">
         <div className="flex items-center space-x-3">
-            <img src="map-icon.svg" alt="Logo" className="w-10 h-10 drop-shadow-sm" />
+            <div className="bg-blue-600 rounded-lg p-1.5 shadow-sm">
+                <img 
+                    src="map-icon.svg" 
+                    alt="Logo" 
+                    className="w-7 h-7 filter invert brightness-0" 
+                    onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://api.iconify.design/material-symbols:map-outline.svg?color=white';
+                    }}
+                />
+            </div>
             <h1 className="text-xl md:text-2xl font-black text-blue-900 tracking-tight">territorio</h1>
         </div>
         <div className="flex items-center space-x-2 md:space-x-4">
-            <span className="text-sm text-gray-600 hidden lg:block font-bold">{user?.name}</span>
+            <div className="hidden lg:flex flex-col items-end mr-2">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Usuário</span>
+                <span className="text-sm text-gray-800 font-bold">{user?.name}</span>
+            </div>
             
             <div className="relative" ref={notificationRef}>
                 <button onClick={() => setShowNotifications(s => !s)} className="relative p-2 rounded-full hover:bg-gray-100 transition-colors">

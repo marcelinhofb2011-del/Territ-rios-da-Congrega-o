@@ -279,16 +279,30 @@ const AdminDashboard: React.FC = () => {
     const fetchData = useCallback(async () => {
         setError('');
         try {
-            const [territoriesData, requestsData, usersData] = await Promise.all([
+            // Tenta buscar cada dado individualmente para não falhar tudo de uma vez
+            const [territoriesData, requestsData, usersData] = await Promise.allSettled([
                 fetchAllTerritories(),
                 fetchAllRequests(),
                 fetchAllUsers()
             ]);
-            setTerritories(territoriesData);
-            setRequests(requestsData);
-            setUsers(usersData);
+
+            if (territoriesData.status === 'fulfilled') setTerritories(territoriesData.value);
+            else console.error("Falha ao carregar territórios", territoriesData.reason);
+
+            if (requestsData.status === 'fulfilled') setRequests(requestsData.value);
+            else console.error("Falha ao carregar solicitações", requestsData.reason);
+
+            if (usersData.status === 'fulfilled') setUsers(usersData.value);
+            else console.error("Falha ao carregar usuários", usersData.reason);
+
+            if (territoriesData.status === 'rejected' && requestsData.status === 'rejected' && usersData.status === 'rejected') {
+                setError('Falha crítica ao carregar os dados. Verifique o console para mais detalhes.');
+            } else if (territoriesData.status === 'rejected' || requestsData.status === 'rejected' || usersData.status === 'rejected') {
+                // Se algum falhou mas outros passaram, apenas logamos, mas a interface continua
+                console.warn("Alguns dados não foram carregados corretamente.");
+            }
         } catch (err) {
-            setError('Falha ao carregar os dados. Tente novamente mais tarde.');
+            setError('Falha inesperada ao carregar os dados.');
         } finally {
             setLoading(false);
         }
@@ -549,7 +563,7 @@ const AdminDashboard: React.FC = () => {
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center">
                                                 <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold mr-3">
-                                                    {u.name.charAt(0).toUpperCase()}
+                                                    {u.name?.charAt(0).toUpperCase() || '?'}
                                                 </div>
                                                 <span className="text-sm font-medium text-gray-900">{u.name}</span>
                                             </div>
