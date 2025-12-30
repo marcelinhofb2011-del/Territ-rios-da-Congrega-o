@@ -1,4 +1,3 @@
-
 export enum TerritoryStatus {
   AVAILABLE = 'disponivel',
   REQUESTED = 'solicitado',
@@ -6,8 +5,14 @@ export enum TerritoryStatus {
   CLOSED = 'fechado',
 }
 
+export enum RequestStatus {
+  PENDING = 'pendente',
+  APPROVED = 'aprovado',
+  REJECTED = 'rejeitado',
+}
+
 export interface User {
-  id: string; // Document ID (mesmo que uid)
+  id: string;
   uid: string;
   email: string;
   name: string;
@@ -25,36 +30,31 @@ export interface TerritoryHistory {
 
 export interface Territory {
   id: string;
-  name:string;
+  name: string;
   status: TerritoryStatus;
   pdfUrl: string;
   createdAt: Date;
-  assignedTo?: string | null;
-  assignedToName?: string | null;
-  assignmentDate?: Date | null;
-  dueDate?: Date | null;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  assignmentDate: Date | null;
+  dueDate: Date | null;
   history: TerritoryHistory[];
   permanentNotes?: string;
 }
 
-export enum RequestStatus {
-    PENDING = 'pendente',
-    APPROVED = 'aprovado',
-    REJECTED = 'rejeitado'
-}
-
 export interface TerritoryRequest {
-    id: string;
-    userId: string;
-    userName: string;
-    requestDate: Date;
-    status: RequestStatus;
+  id: string;
+  userId: string;
+  userName: string;
+  requestDate: Date;
+  status: RequestStatus;
 }
 
-export interface Notification {
+export interface AppNotification {
   id: string;
+  userId: string;
   message: string;
-  type: 'info' | 'warning' | 'success';
+  type: 'info' | 'success' | 'warning';
   read: boolean;
   createdAt: Date;
 }

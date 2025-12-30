@@ -27,7 +27,7 @@ import {
     deleteObject 
 } from 'firebase/storage';
 import { auth, db, storage } from '../firebase/config';
-import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, Notification } from '../types';
+import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, AppNotification } from '../types';
 
 // --- AUTH FUNCTIONS ---
 
@@ -324,14 +324,14 @@ export const submitReport = async (user: User, territory: Territory, notes: stri
 
 // --- NOTIFICATIONS ---
 
-export const fetchNotifications = async (user: User): Promise<Notification[]> => {
+export const fetchNotifications = async (user: User): Promise<AppNotification[]> => {
     const q = query(collection(db, 'notifications'), where('userId', '==', user.id));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
         ...doc.data(),
         id: doc.id,
         createdAt: doc.data().createdAt?.toDate() || new Date()
-    } as Notification)).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 20);
+    } as AppNotification)).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 20);
 };
 
 export const markNotificationsAsRead = async (ids: string[]): Promise<void> => {
