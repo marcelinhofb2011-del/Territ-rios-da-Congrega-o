@@ -1,9 +1,25 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M80 140L200 90V372L80 422V140Z" fill="#3B82F6"/>
-  <path d="M200 90L312 140V422L200 372V90Z" fill="#60A5FA"/>
-  <path d="M312 140L432 90V372L312 422V140Z" fill="#2563EB"/>
-  <g filter="drop-shadow(0px 4px 8px rgba(0, 0, 0, 0.2))">
-    <path d="M256 160C214.5 160 181 193.5 181 235C181 291 256 385 256 385C256 385 331 291 331 235C331 193.5 297.5 160 256 160Z" fill="#EF4444"/>
-    <circle cx="256" cy="235" r="30" fill="white"/>
+  <!-- Fundo do ícone (base do mapa) -->
+  <rect x="40" y="40" width="432" height="432" rx="60" fill="white"/>
+  <rect x="40" y="40" width="432" height="432" rx="60" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="8"/>
+  
+  <!-- Grid do Mapa -->
+  <path d="M40 148H472" stroke="#E2E8F0" stroke-width="2"/>
+  <path d="M40 256H472" stroke="#E2E8F0" stroke-width="2"/>
+  <path d="M40 364H472" stroke="#E2E8F0" stroke-width="2"/>
+  <path d="M148 40V472" stroke="#E2E8F0" stroke-width="2"/>
+  <path d="M256 40V472" stroke="#E2E8F0" stroke-width="2"/>
+  <path d="M364 40V472" stroke="#E2E8F0" stroke-width="2"/>
+
+  <!-- Estradas e Áreas -->
+  <path d="M40 200C150 200 200 150 200 40" stroke="#CBD5E1" stroke-width="24" stroke-linecap="round"/>
+  <path d="M300 472C300 350 400 300 472 300" stroke="#CBD5E1" stroke-width="24" stroke-linecap="round"/>
+  <rect x="320" y="80" width="80" height="120" rx="12" fill="#DBEAFE"/>
+  <rect x="80" y="320" width="120" height="80" rx="12" fill="#DCFCE7"/>
+
+  <!-- Marcador de Localização (Pin) Moderno -->
+  <g filter="drop-shadow(0px 8px 16px rgba(37, 99, 235, 0.2))">
+    <path d="M256 180C217.34 180 186 211.34 186 250C186 302.5 256 390 256 390C256 390 326 302.5 326 250C326 211.34 294.66 180 256 180Z" fill="#2563EB"/>
+    <circle cx="256" cy="250" r="24" fill="white"/>
   </g>
 </svg>
