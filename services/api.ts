@@ -113,6 +113,15 @@ export const fetchAllTerritories = async (): Promise<Territory[]> => {
         
         const list = querySnapshot.docs.map(doc => {
             const data = doc.data();
+            const rawHistory = data.history || [];
+            
+            const history = rawHistory.map((h: any) => ({
+                ...h,
+                completedDate: h.completedDate instanceof Timestamp 
+                    ? h.completedDate.toDate() 
+                    : new Date(h.completedDate)
+            })).sort((a: any, b: any) => b.completedDate.getTime() - a.completedDate.getTime());
+
             return {
                 ...data,
                 id: doc.id,
@@ -120,14 +129,11 @@ export const fetchAllTerritories = async (): Promise<Territory[]> => {
                 createdAt: data.createdAt?.toDate() || new Date(),
                 assignmentDate: data.assignmentDate?.toDate() || null,
                 dueDate: data.dueDate?.toDate() || null,
-                history: (data.history || []).map((h: any) => ({
-                    ...h,
-                    completedDate: h.completedDate?.toDate() || new Date()
-                }))
+                history: history
             } as Territory;
         });
 
-        return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true }));
+        return list;
     } catch (error) {
         console.error("Erro ao buscar territórios:", error);
         throw error;
@@ -159,8 +165,6 @@ export const uploadTerritory = async (name: string, file: File): Promise<void> =
     try {
         const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
         const storageRef = ref(storage, `maps/${fileName}`);
-        
-        // Detecta o mimeType real do arquivo (pode ser PDF ou Imagem)
         const metadata = { contentType: file.type || 'application/pdf' };
         
         const snapshot = await uploadBytes(storageRef, file, metadata);
@@ -168,8 +172,8 @@ export const uploadTerritory = async (name: string, file: File): Promise<void> =
         
         await createTerritory(name, fileUrl);
     } catch (error: any) {
-        console.error("Erro detalhado no upload:", error);
-        throw new Error("Erro ao salvar arquivo. Verifique se você é Admin ou se o arquivo é PDF/Imagem.");
+        console.error("Erro no upload:", error);
+        throw new Error("Erro ao salvar arquivo no Storage.");
     }
 };
 
@@ -187,7 +191,7 @@ export const deleteTerritory = async (territoryId: string): Promise<void> => {
             try {
                 const fileRef = ref(storage, data.pdfUrl);
                 await deleteObject(fileRef);
-            } catch (e) { console.error("Erro ao deletar arquivo do storage:", e); }
+            } catch (e) { console.error("Erro ao deletar arquivo:", e); }
         }
     }
     await deleteDoc(docRef);
@@ -203,11 +207,10 @@ export const fetchAllUsers = async (): Promise<User[]> => {
             return { 
                 ...data, 
                 id: doc.id,
-                name: data.name || data.nome || data.email?.split('@')[0] || 'Sem Nome',
+                name: data.name || data.email?.split('@')[0] || 'Sem Nome',
                 createdAt: data.createdAt?.toDate() || new Date()
             } as User;
         });
-
         return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     } catch (error) {
         console.error("Erro ao buscar usuários:", error);
@@ -219,7 +222,7 @@ export const updateUserRole = async (userId: string, role: 'admin' | 'user'): Pr
     await updateDoc(doc(db, 'users', userId), { role });
 };
 
-// --- OUTRAS FUNÇÕES ---
+// --- REQUESTS & ASSIGNMENTS ---
 
 export const fetchAllRequests = async (): Promise<TerritoryRequest[]> => {
     try {
@@ -243,7 +246,7 @@ export const requestTerritory = async (user: User): Promise<void> => {
 
     await addDoc(collection(db, 'requests'), {
         userId: user.id,
-        userName: user.name || 'Publicador',
+        userName: user.name,
         requestDate: Timestamp.now(),
         status: RequestStatus.PENDING
     });
@@ -274,7 +277,7 @@ export const assignTerritoryToRequest = async (requestId: string, territoryId: s
         const notifRef = doc(collection(db, 'notifications'));
         transaction.set(notifRef, {
             userId: reqData.userId,
-            message: `Território ${territoryDoc.data().name} atribuído.`,
+            message: `Território ${territoryDoc.data().name} atribuído com sucesso.`,
             type: 'success',
             read: false,
             createdAt: Timestamp.now()
@@ -288,21 +291,31 @@ export const rejectRequest = async (requestId: string): Promise<void> => {
 
 export const submitReport = async (user: User, territory: Territory, notes: string): Promise<void> => {
     const territoryRef = doc(db, 'territories', territory.id);
+    
     const historyEntry = {
         userId: user.id,
         userName: user.name,
         completedDate: Timestamp.now(),
-        notes
+        notes: notes.trim()
     };
+
+    // Converter datas existentes do histórico para Timestamp para evitar erro de tipo no updateDoc
+    const currentHistory = (territory.history || []).map(h => ({
+        ...h,
+        completedDate: Timestamp.fromDate(h.completedDate instanceof Date ? h.completedDate : new Date(h.completedDate))
+    }));
+
     await updateDoc(territoryRef, {
         status: TerritoryStatus.AVAILABLE,
         assignedTo: null,
         assignedToName: null,
         assignmentDate: null,
         dueDate: null,
-        history: [...(territory.history || []), historyEntry]
+        history: [...currentHistory, historyEntry]
     });
 };
+
+// --- NOTIFICATIONS ---
 
 export const fetchNotifications = async (user: User): Promise<Notification[]> => {
     const q = query(collection(db, 'notifications'), where('userId', '==', user.id));
@@ -319,6 +332,8 @@ export const markNotificationsAsRead = async (ids: string[]): Promise<void> => {
         await updateDoc(doc(db, 'notifications', id), { read: true });
     }
 };
+
+// --- PUBLISHER DATA ---
 
 export const fetchPublisherData = async (userId: string): Promise<{ myTerritory: Territory | null, hasPendingRequest: boolean }> => {
     const territoriesQ = query(collection(db, 'territories'), where('assignedTo', '==', userId), where('status', '==', TerritoryStatus.IN_USE));

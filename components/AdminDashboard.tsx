@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus } from '../types';
 import { 
     fetchAllTerritories, fetchAllRequests, assignTerritoryToRequest, rejectRequest, uploadTerritory, 
     updateTerritory, deleteTerritory, fetchAllUsers, updateUserRole, createTerritory 
 } from '../services/api';
-import { formatDate } from '../utils/helpers';
+import { formatDate, isRecentWork } from '../utils/helpers';
 
 // --- MODAIS ---
 
@@ -20,7 +19,7 @@ const TerritoryHistoryModal: React.FC<{ territory: Territory; onClose: () => voi
                 <div className="max-h-[60vh] overflow-y-auto pr-2 no-scrollbar">
                     {territory.history && territory.history.length > 0 ? (
                         <ul className="space-y-4">
-                            {territory.history.slice().reverse().map((entry, index) => (
+                            {territory.history.slice().map((entry, index) => (
                                 <li key={index} className="border-b border-gray-50 pb-4 last:border-0">
                                     <div className="flex justify-between items-start mb-1">
                                         <p className="font-bold text-gray-800">{entry.userName || 'Publicador'}</p>
@@ -79,7 +78,7 @@ const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ 
                     {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl">{error}</p>}
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Nome/Número do Mapa</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" placeholder="Ex: Território 05" />
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-black" placeholder="Ex: Território 05" />
                     </div>
                     
                     <div className="flex p-1 bg-gray-100 rounded-xl">
@@ -95,7 +94,7 @@ const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ 
                     ) : (
                         <div>
                             <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Link do PDF/Imagem</label>
-                            <input type="url" value={link} onChange={e => setLink(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium" placeholder="https://..." />
+                            <input type="url" value={link} onChange={e => setLink(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-black" placeholder="https://..." />
                         </div>
                     )}
 
@@ -174,13 +173,48 @@ const AdminDashboard: React.FC = () => {
         await loadData();
     };
 
+    // Lógica de Ordenação Inteligente
+    const sortedTerritories = useMemo(() => {
+        return [...territories].sort((a, b) => {
+            // 1. Mapas Atualmente em Uso por último
+            if (a.status === TerritoryStatus.IN_USE && b.status !== TerritoryStatus.IN_USE) return 1;
+            if (b.status === TerritoryStatus.IN_USE && a.status !== TerritoryStatus.IN_USE) return -1;
+            
+            // Se ambos não estão em uso, ver histórico
+            const aRecent = isRecentWork(a.history);
+            const bRecent = isRecentWork(b.history);
+            const aNeverWorked = (a.history || []).length === 0;
+            const bNeverWorked = (b.history || []).length === 0;
+
+            // 2. Mapas NUNCA trabalhados primeiro
+            if (aNeverWorked && !bNeverWorked) return -1;
+            if (bNeverWorked && !aNeverWorked) return 1;
+
+            // 3. Mapas que NÃO estão em descanso (mais de 60 dias) vêm antes dos "em descanso"
+            if (!aRecent && bRecent) return -1;
+            if (aRecent && !bRecent) return 1;
+
+            // 4. Se ambos estão na mesma categoria, ordenar por data de último trabalho (mais antigo primeiro)
+            if (a.history.length > 0 && b.history.length > 0) {
+                return a.history[0].completedDate.getTime() - b.history[0].completedDate.getTime();
+            }
+
+            // 5. Fallback para ordem alfabética de nome
+            return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+        });
+    }, [territories]);
+
+    // Opções para o seletor de atribuição (apenas disponíveis e priorizando descansados)
+    const availableMapsOptions = useMemo(() => {
+        return sortedTerritories.filter(t => t.status === TerritoryStatus.AVAILABLE);
+    }, [sortedTerritories]);
+
     const stats = useMemo(() => ({
         total: territories.length,
-        available: territories.filter(t => t.status === TerritoryStatus.AVAILABLE).length,
+        available: territories.filter(t => t.status === TerritoryStatus.AVAILABLE && !isRecentWork(t.history)).length,
+        resting: territories.filter(t => t.status === TerritoryStatus.AVAILABLE && isRecentWork(t.history)).length,
         inUse: territories.filter(t => t.status === TerritoryStatus.IN_USE).length,
     }), [territories]);
-
-    const availableMaps = useMemo(() => territories.filter(t => t.status === TerritoryStatus.AVAILABLE), [territories]);
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center p-20 space-y-4">
@@ -194,7 +228,6 @@ const AdminDashboard: React.FC = () => {
             {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={loadData} />}
             {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
 
-            {/* Cabeçalho */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div>
                     <h1 className="text-4xl font-black text-gray-900 tracking-tight">Painel Admin</h1>
@@ -208,15 +241,18 @@ const AdminDashboard: React.FC = () => {
 
             {activeTab === 'territories' ? (
                 <>
-                    {/* Estatísticas */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total</p>
                             <p className="text-3xl font-black text-gray-900">{stats.total}</p>
                         </div>
                         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Livres</p>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Disponíveis</p>
                             <p className="text-3xl font-black text-green-600">{stats.available}</p>
+                        </div>
+                        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Em Descanso</p>
+                            <p className="text-3xl font-black text-amber-500">{stats.resting}</p>
                         </div>
                         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Em Campo</p>
@@ -224,7 +260,6 @@ const AdminDashboard: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Solicitações */}
                     {requests.length > 0 && (
                         <div className="bg-blue-600 rounded-3xl p-8 text-white shadow-xl shadow-blue-200">
                             <h2 className="text-2xl font-black mb-6 flex items-center gap-3">
@@ -245,12 +280,17 @@ const AdminDashboard: React.FC = () => {
                                                     <select 
                                                         value={selectedMapForRequest} 
                                                         onChange={e => setSelectedMapForRequest(e.target.value)}
-                                                        className="bg-white text-gray-900 px-4 py-2 rounded-xl font-bold outline-none"
+                                                        className="bg-white text-gray-900 px-4 py-2 rounded-xl font-bold outline-none max-w-[200px]"
                                                     >
                                                         <option value="">Escolha um mapa...</option>
-                                                        {availableMaps.map(m => (
-                                                            <option key={m.id} value={m.id}>{m.name}</option>
-                                                        ))}
+                                                        {availableMapsOptions.map(m => {
+                                                            const isResting = isRecentWork(m.history);
+                                                            return (
+                                                                <option key={m.id} value={m.id}>
+                                                                    {m.name} {isResting ? '(EM DESCANSO)' : '(LIVRE)'}
+                                                                </option>
+                                                            );
+                                                        })}
                                                     </select>
                                                     <button onClick={() => handleFulfillRequest(req.id)} disabled={!selectedMapForRequest} className="bg-green-500 p-2 rounded-xl">✓</button>
                                                     <button onClick={() => setFulfillingRequestId(null)} className="bg-red-400 p-2 rounded-xl">✕</button>
@@ -268,10 +308,9 @@ const AdminDashboard: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Lista de Mapas */}
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                         <div className="p-8 border-b border-gray-50 flex justify-between items-center">
-                            <h2 className="text-2xl font-black text-gray-800">Todos os Territórios</h2>
+                            <h2 className="text-2xl font-black text-gray-800">Ordenação: Disponíveis -> Descanso -> Em Campo</h2>
                             <button onClick={() => setShowAddModal(true)} className="bg-blue-600 text-white font-black py-2.5 px-6 rounded-xl hover:bg-blue-700 transition-all">+ Novo</button>
                         </div>
                         <div className="overflow-x-auto">
@@ -280,38 +319,63 @@ const AdminDashboard: React.FC = () => {
                                     <tr>
                                         <th className="px-8 py-4">Nome</th>
                                         <th className="px-8 py-4">Status</th>
-                                        <th className="px-8 py-4">Atribuído a</th>
+                                        <th className="px-8 py-4">Último Trabalho</th>
                                         <th className="px-8 py-4 text-right">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
-                                    {territories.map(t => (
-                                        <tr key={t.id} className="hover:bg-gray-50/50 transition-colors">
-                                            <td className="px-8 py-6 font-black text-gray-800">{t.name}</td>
-                                            <td className="px-8 py-6">
-                                                <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${t.status === TerritoryStatus.AVAILABLE ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                    {t.status === TerritoryStatus.AVAILABLE ? 'Livre' : 'Em Campo'}
-                                                </span>
-                                            </td>
-                                            <td className="px-8 py-6">
-                                                <p className="text-sm font-bold text-gray-700">{t.assignedToName || '-'}</p>
-                                                {t.assignmentDate && <p className="text-xs text-gray-400">{formatDate(t.assignmentDate)}</p>}
-                                            </td>
-                                            <td className="px-8 py-6 text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <button onClick={() => setViewHistory(t)} className="p-2 text-gray-400 hover:text-blue-600 transition-all">Histórico</button>
-                                                    <button onClick={() => handleDeleteTerritory(t.id)} className="p-2 text-gray-400 hover:text-red-600 transition-all">Excluir</button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {sortedTerritories.map(t => {
+                                        const resting = isRecentWork(t.history);
+                                        const neverWorked = t.history.length === 0;
+
+                                        return (
+                                            <tr key={t.id} className="hover:bg-gray-50/50 transition-colors">
+                                                <td className="px-8 py-6 font-black text-gray-800">{t.name}</td>
+                                                <td className="px-8 py-6">
+                                                    {t.status === TerritoryStatus.IN_USE ? (
+                                                        <span className="px-3 py-1 rounded-full text-xs font-black uppercase bg-blue-100 text-blue-700">
+                                                            Em Campo
+                                                        </span>
+                                                    ) : resting ? (
+                                                        <span className="px-3 py-1 rounded-full text-xs font-black uppercase bg-amber-100 text-amber-700">
+                                                            Em Descanso
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-3 py-1 rounded-full text-xs font-black uppercase bg-green-100 text-green-700">
+                                                            {neverWorked ? 'Novo' : 'Livre'}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-8 py-6">
+                                                    {t.status === TerritoryStatus.IN_USE ? (
+                                                        <div>
+                                                            <p className="text-sm font-bold text-gray-700">{t.assignedToName}</p>
+                                                            <p className="text-xs text-gray-400">Desde {formatDate(t.assignmentDate)}</p>
+                                                        </div>
+                                                    ) : t.history.length > 0 ? (
+                                                        <div>
+                                                            <p className="text-sm font-bold text-gray-600">{t.history[0].userName}</p>
+                                                            <p className="text-xs text-gray-400">Concluído em {formatDate(t.history[0].completedDate)}</p>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-sm text-gray-300 italic">Sem registros</p>
+                                                    )}
+                                                </td>
+                                                <td className="px-8 py-6 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button onClick={() => setViewHistory(t)} className="p-2 text-gray-400 hover:text-blue-600 transition-all text-sm font-bold">Histórico</button>
+                                                        <button onClick={() => handleDeleteTerritory(t.id)} className="p-2 text-gray-400 hover:text-red-600 transition-all text-sm font-bold">Excluir</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </>
             ) : (
-                /* Aba de Usuários */
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                     <div className="p-8 border-b border-gray-50">
                         <h2 className="text-2xl font-black text-gray-800">Publicadores</h2>

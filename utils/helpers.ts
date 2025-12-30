@@ -10,14 +10,32 @@ export const formatDate = (date: Date | undefined | null): string => {
 export const getDaysRemaining = (dueDate: Date | undefined | null): number | null => {
     if (!dueDate) return null;
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize today to the start of the day
-    const due = new Date(dueDate); // Create a new Date object to avoid modifying the original
-    due.setHours(0, 0, 0, 0); // Normalize due date
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
     
     const diffTime = due.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-}
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+/**
+ * Retorna true se o território foi trabalhado nos últimos 60 dias.
+ */
+export const isRecentWork = (history: any[] | undefined): boolean => {
+    if (!history || history.length === 0) return false;
+    
+    // O histórico já vem ordenado pela API (mais recente primeiro)
+    const lastEntry = history[0];
+    const completedDate = lastEntry.completedDate instanceof Date 
+        ? lastEntry.completedDate 
+        : lastEntry.completedDate?.toDate?.() || new Date(lastEntry.completedDate);
+
+    const today = new Date();
+    const diffTime = today.getTime() - completedDate.getTime();
+    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+    
+    return diffDays < 60; 
+};
 
 export const getDeadlineColorInfo = (dueDate: Date | undefined | null): { textColor: string, bgColor: string, label: string } => {
   const daysRemaining = getDaysRemaining(dueDate);
