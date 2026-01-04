@@ -10,11 +10,12 @@ const MapViewerModal: React.FC<{ url: string; name: string; onClose: () => void 
     const viewerUrl = isPdf ? `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true` : url;
 
     const modalWrapperClasses = isFullscreen
-        ? "fixed inset-0 z-50 bg-gray-900"
+        ? "fixed inset-0 z-50 bg-gray-900" // No blur in fullscreen for performance
         : "fixed inset-0 bg-gray-900 bg-opacity-80 flex flex-col items-center justify-center z-50 p-2 sm:p-4 backdrop-blur-sm animate-in fade-in";
     
+    // Added safe-area padding for fullscreen on mobile devices with notches
     const modalContainerClasses = isFullscreen
-        ? "bg-white w-full h-full flex flex-col overflow-hidden"
+        ? "bg-white w-full h-full flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
         : "bg-white rounded-3xl w-full h-full max-w-6xl flex flex-col overflow-hidden shadow-2xl";
 
     return (
@@ -37,7 +38,8 @@ const MapViewerModal: React.FC<{ url: string; name: string; onClose: () => void 
                         <button onClick={onClose} className="text-gray-400 hover:text-gray-800 text-3xl font-bold leading-none p-2 rounded-full transition-colors -mr-2">&times;</button>
                     </div>
                 </header>
-                <div className="flex-grow w-full h-full bg-gray-200 flex items-center justify-center">
+                {/* Refactored content area to better handle centering and filling */}
+                <div className="flex-grow w-full h-full bg-gray-200">
                     {isPdf ? (
                         <iframe
                             src={viewerUrl}
@@ -46,13 +48,17 @@ const MapViewerModal: React.FC<{ url: string; name: string; onClose: () => void 
                             sandbox="allow-scripts allow-same-origin"
                         />
                     ) : isImage ? (
-                        <img src={url} alt={`Mapa ${name}`} className="max-w-full max-h-full object-contain" />
+                        <div className="w-full h-full flex items-center justify-center p-2">
+                            <img src={url} alt={`Mapa ${name}`} className="max-w-full max-h-full object-contain" />
+                        </div>
                     ) : (
-                        <div className="text-center p-8">
-                            <p className="font-bold text-gray-700 mb-4">Não é possível pré-visualizar este formato.</p>
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700">
-                                Abrir em Nova Aba
-                            </a>
+                        <div className="w-full h-full flex items-center justify-center">
+                            <div className="text-center p-8">
+                                <p className="font-bold text-gray-700 mb-4">Não é possível pré-visualizar este formato.</p>
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700">
+                                    Abrir em Nova Aba
+                                </a>
+                            </div>
                         </div>
                     )}
                 </div>
