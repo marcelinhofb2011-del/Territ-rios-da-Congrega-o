@@ -11,6 +11,22 @@ import { db } from '../firebase/config';
 
 // --- MODAIS ---
 
+const MapViewerModal: React.FC<{ url: string; name: string; onClose: () => void }> = ({ url, name, onClose }) => {
+    return (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-80 flex flex-col items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-3xl w-full h-full max-w-6xl flex flex-col overflow-hidden">
+                <header className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+                    <h2 className="text-lg font-black text-gray-800 truncate pr-4">Visualizando: {name}</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-800 text-3xl font-bold leading-none p-2 rounded-full transition-colors">&times;</button>
+                </header>
+                <div className="flex-grow w-full h-full">
+                    <iframe src={url} className="w-full h-full border-0" title={`Mapa ${name}`} />
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const TerritoryHistoryModal: React.FC<{ territory: Territory; onClose: () => void; }> = ({ territory, onClose }) => {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -180,6 +196,7 @@ const AdminDashboard: React.FC = () => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingTerritory, setEditingTerritory] = useState<Territory | null>(null);
     const [viewHistory, setViewHistory] = useState<Territory | null>(null);
+    const [viewingMap, setViewingMap] = useState<Territory | null>(null);
     const [fulfillingRequestId, setFulfillingRequestId] = useState<string | null>(null);
     const [selectedMapForRequest, setSelectedMapForRequest] = useState<string>('');
 
@@ -324,6 +341,7 @@ const AdminDashboard: React.FC = () => {
             {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={() => {}} />}
             {editingTerritory && <EditMapModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={() => {}} />}
             {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
+            {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} onClose={() => setViewingMap(null)} />}
 
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div className="flex items-center gap-4">
@@ -436,7 +454,7 @@ const AdminDashboard: React.FC = () => {
                                             <tr key={m.id} className="group hover:bg-gray-50 transition-colors">
                                                 <td className="px-8 py-6">
                                                     <p className="font-black text-gray-900 text-lg">{m.name}</p>
-                                                    <a href={`${m.pdfUrl}&t=${new Date().getTime()}`} target="_blank" rel="noreferrer" className="text-xs text-blue-500 font-bold hover:underline">Ver Arquivo &rarr;</a>
+                                                    <button onClick={() => setViewingMap(m)} className="text-xs text-blue-500 font-bold hover:underline">Ver Arquivo &rarr;</button>
                                                 </td>
                                                 <td className="px-8 py-6">
                                                     {m.status === TerritoryStatus.IN_USE ? (

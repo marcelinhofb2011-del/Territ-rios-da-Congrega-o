@@ -188,17 +188,14 @@ export const uploadTerritory = async (name: string, file: File): Promise<void> =
         const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
         const storageRef = ref(storage, `maps/${fileName}`);
 
-        // Etapa 1: Fazer upload do arquivo.
-        const snapshot = await uploadBytes(storageRef, file);
-
-        // Etapa 2: Atualizar os metadados para garantir a visualização inline.
         const metadata = { 
             contentType: file.type || 'application/pdf',
-            contentDisposition: 'inline'
+            contentDisposition: 'inline' // Garante que o navegador tente exibir o arquivo em vez de baixar.
         };
-        await updateMetadata(snapshot.ref, metadata);
+
+        // Faz o upload do arquivo já com os metadados corretos em uma única operação.
+        const snapshot = await uploadBytes(storageRef, file, metadata);
         
-        // Etapa 3: Obter a URL de download e criar o registro no Firestore.
         const fileUrl = await getDownloadURL(snapshot.ref);
         await createTerritory(name, fileUrl);
         
