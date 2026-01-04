@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { User } from '../types';
 import { apiLogin, apiLogout, apiSignUp } from '../services/api';
@@ -21,13 +22,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
       if (firebaseUser) {
-        setLoading(true);
         try {
           let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           
           if (!userDoc.exists()) {
-             await new Promise(r => setTimeout(r, 1000));
+             // Pequena espera para garantir que o Firestore processou o registro inicial (caso seja novo usuário)
+             await new Promise(r => setTimeout(r, 800));
              userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           }
 

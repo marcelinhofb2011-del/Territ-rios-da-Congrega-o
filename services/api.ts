@@ -1,3 +1,4 @@
+
 import { 
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
@@ -70,9 +71,15 @@ export const apiLogin = async (email: string, pass: string): Promise<User> => {
             name: data.name || data.nome || userCredential.user.displayName || email.split('@')[0] || 'Usuário',
             createdAt: data.createdAt?.toDate() || new Date()
         } as User;
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erro no apiLogin:", error);
-        throw error;
+        if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+            throw new Error("E-mail ou senha incorretos. Verifique seus dados.");
+        }
+        if (error.code === 'auth/too-many-requests') {
+            throw new Error("Muitas tentativas sem sucesso. Tente novamente mais tarde.");
+        }
+        throw new Error("Erro ao acessar o sistema. Tente novamente.");
     }
 };
 
@@ -102,9 +109,15 @@ export const apiSignUp = async (name: string, email: string, pass: string): Prom
         });
         
         return newUser;
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erro no apiSignUp:", error);
-        throw error;
+        if (error.code === 'auth/email-already-in-use') {
+            throw new Error("Este e-mail já está sendo utilizado.");
+        }
+        if (error.code === 'auth/weak-password') {
+            throw new Error("A senha deve ter pelo menos 6 caracteres.");
+        }
+        throw new Error("Erro ao criar conta. Tente novamente.");
     }
 };
 
@@ -203,6 +216,17 @@ export const deleteTerritory = async (territoryId: string): Promise<void> => {
         }
     }
     await deleteDoc(docRef);
+};
+
+export const adminResetTerritory = async (territoryId: string): Promise<void> => {
+    const territoryRef = doc(db, 'territories', territoryId);
+    await updateDoc(territoryRef, {
+        status: TerritoryStatus.AVAILABLE,
+        assignedTo: null,
+        assignedToName: null,
+        assignmentDate: null,
+        dueDate: null
+    });
 };
 
 // --- USER MANAGEMENT ---

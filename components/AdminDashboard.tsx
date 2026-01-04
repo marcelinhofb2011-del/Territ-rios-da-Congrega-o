@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus } from '../types';
 import { 
     fetchAllTerritories, fetchAllRequests, assignTerritoryToRequest, rejectRequest, uploadTerritory, 
-    updateTerritory, deleteTerritory, fetchAllUsers, updateUserRole, createTerritory 
+    updateTerritory, deleteTerritory, fetchAllUsers, updateUserRole, createTerritory, adminResetTerritory
 } from '../services/api';
 import { formatDate, isRecentWork } from '../utils/helpers';
 
@@ -165,6 +164,12 @@ const AdminDashboard: React.FC = () => {
     const handleDeleteTerritory = async (id: string) => {
         if (!confirm("Tem certeza que deseja excluir este território?")) return;
         await deleteTerritory(id);
+        await loadData();
+    };
+
+    const handleResetTerritory = async (id: string) => {
+        if (!confirm("Deseja retomar este território? Ele voltará a ficar disponível sem precisar de relatório.")) return;
+        await adminResetTerritory(id);
         await loadData();
     };
 
@@ -351,6 +356,11 @@ const AdminDashboard: React.FC = () => {
                                                     <p className="text-sm font-bold text-gray-600">{m.history && m.history.length > 0 ? formatDate(m.history[0].completedDate) : 'Nunca'}</p>
                                                 </td>
                                                 <td className="px-8 py-6 text-right space-x-2">
+                                                    {m.status === TerritoryStatus.IN_USE && (
+                                                        <button onClick={() => handleResetTerritory(m.id)} className="p-3 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all" title="Retomar Mapa">
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg>
+                                                        </button>
+                                                    )}
                                                     <button onClick={() => setViewHistory(m)} className="p-3 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Histórico">
                                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                                     </button>

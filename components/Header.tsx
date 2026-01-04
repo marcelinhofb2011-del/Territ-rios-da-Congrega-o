@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { AppNotification } from '../types';
 import { markNotificationsAsRead } from '../services/api';
 import { db } from '../firebase/config';
-import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, limit } from 'firebase/firestore';
 import { formatDate } from '../utils/helpers';
 
 const Header: React.FC = () => {
@@ -17,11 +18,12 @@ const Header: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
+    // Removemos o orderBy daqui para evitar erro de índice composto (failed-precondition)
+    // Buscamos as últimas 50 notificações do usuário e ordenamos no cliente.
     const q = query(
       collection(db, 'notifications'),
       where('userId', '==', user.id),
-      orderBy('createdAt', 'desc'),
-      limit(10)
+      limit(50)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -30,7 +32,14 @@ const Header: React.FC = () => {
         id: doc.id,
         createdAt: doc.data().createdAt?.toDate() || new Date()
       } as AppNotification));
-      setNotifications(notifs);
+      
+      // Ordenação no cliente: mais recentes primeiro
+      const sortedNotifs = notifs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      
+      // Limitamos a exibição das 10 mais recentes
+      setNotifications(sortedNotifs.slice(0, 10));
+    }, (error) => {
+      console.error("Erro ao escutar notificações:", error);
     });
 
     return () => unsubscribe();
