@@ -78,7 +78,7 @@ const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ 
                     {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl">{error}</p>}
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Nome/Número do Mapa</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-black" placeholder="Ex: Território 05" />
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-black text-gray-900" placeholder="Ex: Território 05" />
                     </div>
                     
                     <div className="flex p-1 bg-gray-100 rounded-xl">
@@ -94,7 +94,7 @@ const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ 
                     ) : (
                         <div>
                             <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Link do PDF/Imagem</label>
-                            <input type="url" value={link} onChange={e => setLink(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-black" placeholder="https://..." />
+                            <input type="url" value={link} onChange={e => setLink(e.target.value)} className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-gray-900" placeholder="https://..." />
                         </div>
                     )}
 
@@ -139,7 +139,7 @@ const EditMapModal: React.FC<{ territory: Territory; onClose: () => void; onSave
                     {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl">{error}</p>}
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Nome/Número do Mapa</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-black" />
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-black text-gray-900" />
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Observações Permanentes</label>
@@ -147,7 +147,7 @@ const EditMapModal: React.FC<{ territory: Territory; onClose: () => void; onSave
                             value={notes}
                             onChange={e => setNotes(e.target.value)}
                             rows={5}
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-black"
+                            className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-gray-900"
                             placeholder="Ex: Não bater na casa 123 a pedido do morador."
                         />
                          <p className="text-xs text-gray-400 mt-1 ml-1">Esta nota será visível para todos os publicadores que trabalharem neste mapa.</p>
