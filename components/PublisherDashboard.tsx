@@ -172,7 +172,7 @@ const PublisherDashboard: React.FC = () => {
                     return (
                         <div className="bg-white rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden">
                             <div className="p-8 sm:p-12">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-10">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
                                     <div>
                                         <span className="text-xs font-black uppercase tracking-widest text-blue-600 mb-2 block">Mapa Atual</span>
                                         <h3 className="text-5xl font-black text-gray-900 leading-tight">{myTerritory.name}</h3>
@@ -181,6 +181,16 @@ const PublisherDashboard: React.FC = () => {
                                         {colorInfo.label}
                                     </div>
                                 </div>
+
+                                {myTerritory.permanentNotes && (
+                                    <div className="mb-10 p-6 bg-amber-50 border-2 border-amber-100 rounded-2xl">
+                                        <h4 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-amber-700 mb-3">
+                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 110-2 1 1 0 010 2zm-1.75-5.25a.75.75 0 00-1.5 0v3.5a.75.75 0 001.5 0v-3.5z" clipRule="evenodd" /></svg>
+                                            Observações Importantes
+                                        </h4>
+                                        <p className="text-amber-900 font-medium whitespace-pre-wrap">{myTerritory.permanentNotes}</p>
+                                    </div>
+                                )}
 
                                 <div className="space-y-3 mb-12">
                                     <div className="flex justify-between text-xs font-black text-gray-400 uppercase tracking-tighter">

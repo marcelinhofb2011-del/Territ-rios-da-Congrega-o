@@ -110,6 +110,60 @@ const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ 
     );
 };
 
+const EditMapModal: React.FC<{ territory: Territory; onClose: () => void; onSave: () => void; }> = ({ territory, onClose, onSave }) => {
+    const [name, setName] = useState(territory.name);
+    const [notes, setNotes] = useState(territory.permanentNotes || '');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            await updateTerritory(territory.id, { name, permanentNotes: notes });
+            onSave();
+            onClose();
+        } catch (err: any) {
+            setError(err.message || "Erro ao atualizar mapa.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
+                <h2 className="text-2xl font-black mb-6 text-gray-800">Editar: {territory.name}</h2>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl">{error}</p>}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Nome/Número do Mapa</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-black" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Observações Permanentes</label>
+                        <textarea
+                            value={notes}
+                            onChange={e => setNotes(e.target.value)}
+                            rows={5}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-black"
+                            placeholder="Ex: Não bater na casa 123 a pedido do morador."
+                        />
+                         <p className="text-xs text-gray-400 mt-1 ml-1">Esta nota será visível para todos os publicadores que trabalharem neste mapa.</p>
+                    </div>
+                    <div className="flex gap-4 pt-4">
+                        <button type="button" onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-600 font-bold rounded-2xl hover:bg-gray-200 transition-colors">Cancelar</button>
+                        <button type="submit" disabled={loading} className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 disabled:bg-blue-300">
+                            {loading ? 'Salvando...' : 'Salvar Alterações'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 // --- COMPONENTE PRINCIPAL ---
 
 const AdminDashboard: React.FC = () => {
@@ -121,6 +175,7 @@ const AdminDashboard: React.FC = () => {
     
     // UI States
     const [showAddModal, setShowAddModal] = useState(false);
+    const [editingTerritory, setEditingTerritory] = useState<Territory | null>(null);
     const [viewHistory, setViewHistory] = useState<Territory | null>(null);
     const [fulfillingRequestId, setFulfillingRequestId] = useState<string | null>(null);
     const [selectedMapForRequest, setSelectedMapForRequest] = useState<string>('');
@@ -224,6 +279,7 @@ const AdminDashboard: React.FC = () => {
     return (
         <div className="max-w-6xl mx-auto space-y-8 pb-20">
             {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={loadData} />}
+            {editingTerritory && <EditMapModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={loadData} />}
             {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
 
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -355,15 +411,18 @@ const AdminDashboard: React.FC = () => {
                                                 <td className="px-8 py-6">
                                                     <p className="text-sm font-bold text-gray-600">{m.history && m.history.length > 0 ? formatDate(m.history[0].completedDate) : 'Nunca'}</p>
                                                 </td>
-                                                <td className="px-8 py-6 text-right space-x-2">
+                                                <td className="px-8 py-6 text-right space-x-1">
+                                                    <button onClick={() => setEditingTerritory(m)} className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all" title="Editar Mapa">
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg>
+                                                    </button>
+                                                    <button onClick={() => setViewHistory(m)} className="p-3 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Histórico">
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                    </button>
                                                     {m.status === TerritoryStatus.IN_USE && (
                                                         <button onClick={() => handleResetTerritory(m.id)} className="p-3 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all" title="Retomar Mapa">
                                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg>
                                                         </button>
                                                     )}
-                                                    <button onClick={() => setViewHistory(m)} className="p-3 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Histórico">
-                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                                    </button>
                                                     <button onClick={() => handleDeleteTerritory(m.id)} className="p-3 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Excluir">
                                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                                     </button>

@@ -186,7 +186,10 @@ export const uploadTerritory = async (name: string, file: File): Promise<void> =
     try {
         const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
         const storageRef = ref(storage, `maps/${fileName}`);
-        const metadata = { contentType: file.type || 'application/pdf' };
+        const metadata = { 
+            contentType: file.type || 'application/pdf',
+            contentDisposition: 'inline'
+        };
         
         const snapshot = await uploadBytes(storageRef, file, metadata);
         const fileUrl = await getDownloadURL(snapshot.ref);
@@ -331,10 +334,23 @@ export const submitReport = async (user: User, territory: Territory, notes: stri
         notes: notes.trim()
     };
 
-    const currentHistory = (territory.history || []).map(h => ({
-        ...h,
-        completedDate: Timestamp.fromDate(h.completedDate instanceof Date ? h.completedDate : new Date(h.completedDate))
-    }));
+    const currentHistory = (territory.history || []).map(h => {
+        // Explicitamente recria o objeto para evitar espalhar propriedades/referências internas do Firebase
+        const cleanEntry: {
+            userId: string;
+            userName: string;
+            completedDate: Timestamp;
+            notes?: string;
+        } = {
+            userId: h.userId,
+            userName: h.userName,
+            completedDate: Timestamp.fromDate(h.completedDate instanceof Date ? h.completedDate : new Date(h.completedDate)),
+        };
+        if (h.notes) {
+            cleanEntry.notes = h.notes;
+        }
+        return cleanEntry;
+    });
 
     await updateDoc(territoryRef, {
         status: TerritoryStatus.AVAILABLE,
@@ -369,16 +385,28 @@ export const markNotificationsAsRead = async (ids: string[]): Promise<void> => {
 export const fetchPublisherData = async (userId: string): Promise<{ myTerritory: Territory | null, hasPendingRequest: boolean }> => {
     const territoriesQ = query(collection(db, 'territories'), where('assignedTo', '==', userId), where('status', '==', TerritoryStatus.IN_USE));
     const territorySnapshot = await getDocs(territoriesQ);
-    const myTerritory = !territorySnapshot.empty ? { 
-        ...territorySnapshot.docs[0].data(), 
-        id: territorySnapshot.docs[0].id,
-        dueDate: territorySnapshot.docs[0].data().dueDate?.toDate() || null,
-        assignmentDate: territorySnapshot.docs[0].data().assignmentDate?.toDate() || null,
-        history: (territorySnapshot.docs[0].data().history || []).map((h:any) => ({
-            ...h, 
-            completedDate: h.completedDate?.toDate() || new Date()
-        }))
-    } as Territory : null;
+    
+    let myTerritory: Territory | null = null;
+    if (!territorySnapshot.empty) {
+        const doc = territorySnapshot.docs[0];
+        const data = doc.data();
+        myTerritory = {
+            id: doc.id,
+            name: data.name || 'Sem Nome',
+            status: data.status,
+            pdfUrl: data.pdfUrl,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            assignedTo: data.assignedTo,
+            assignedToName: data.assignedToName,
+            assignmentDate: data.assignmentDate?.toDate() || null,
+            dueDate: data.dueDate?.toDate() || null,
+            permanentNotes: data.permanentNotes || '',
+            history: (data.history || []).map((h:any) => ({
+                ...h, 
+                completedDate: h.completedDate?.toDate() || new Date()
+            }))
+        };
+    }
     
     const requestQ = query(collection(db, 'requests'), where('userId', '==', userId), where('status', '==', RequestStatus.PENDING));
     const requestSnapshot = await getDocs(requestQ);
