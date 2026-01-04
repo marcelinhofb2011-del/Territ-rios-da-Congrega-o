@@ -285,6 +285,21 @@ export const requestTerritory = async (user: User): Promise<void> => {
         requestDate: Timestamp.now(),
         status: RequestStatus.PENDING
     });
+
+    // Notificar todos os administradores
+    const qAdmins = query(collection(db, 'users'), where('role', '==', 'admin'));
+    const adminsSnapshot = await getDocs(qAdmins);
+    
+    adminsSnapshot.forEach(adminDoc => {
+        const adminId = adminDoc.id;
+        addDoc(collection(db, 'notifications'), {
+            userId: adminId,
+            message: `${user.name} solicitou um novo território.`,
+            type: 'info',
+            read: false,
+            createdAt: Timestamp.now()
+        });
+    });
 };
 
 export const assignTerritoryToRequest = async (requestId: string, territoryId: string): Promise<void> => {

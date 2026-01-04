@@ -203,7 +203,7 @@ const PublisherDashboard: React.FC = () => {
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <a href={myTerritory.pdfUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 py-5 bg-gray-900 text-white font-black rounded-3xl hover:bg-black transition-all transform active:scale-95 shadow-xl shadow-gray-200">
+                                    <a href={`${myTerritory.pdfUrl}&t=${new Date().getTime()}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 py-5 bg-gray-900 text-white font-black rounded-3xl hover:bg-black transition-all transform active:scale-95 shadow-xl shadow-gray-200">
                                         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                         VER MAPA
                                     </a>

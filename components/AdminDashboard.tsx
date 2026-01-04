@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus } from '../types';
 import { 
-    fetchAllTerritories, fetchAllRequests, assignTerritoryToRequest, rejectRequest, uploadTerritory, 
+    fetchAllTerritories, assignTerritoryToRequest, rejectRequest, uploadTerritory, 
     updateTerritory, deleteTerritory, fetchAllUsers, updateUserRole, createTerritory, adminResetTerritory
 } from '../services/api';
 import { formatDate, isRecentWork } from '../utils/helpers';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase/config';
+
 
 // --- MODAIS ---
 
@@ -183,13 +186,11 @@ const AdminDashboard: React.FC = () => {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [t, r, u] = await Promise.all([
+            const [t, u] = await Promise.all([
                 fetchAllTerritories(),
-                fetchAllRequests(),
                 fetchAllUsers()
             ]);
             setTerritories(t);
-            setRequests(r);
             setUsers(u);
         } catch (e) {
             console.error("Erro ao carregar dados admin:", e);
@@ -200,38 +201,55 @@ const AdminDashboard: React.FC = () => {
 
     useEffect(() => { loadData(); }, [loadData]);
 
+    // Listener em tempo real para solicitações
+    useEffect(() => {
+        const q = query(collection(db, 'requests'), where('status', '==', RequestStatus.PENDING));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const reqs = snapshot.docs.map(doc => ({
+                ...doc.data(),
+                id: doc.id,
+                requestDate: doc.data().requestDate?.toDate() || new Date()
+            } as TerritoryRequest)).sort((a, b) => b.requestDate.getTime() - a.requestDate.getTime());
+            setRequests(reqs);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
     const handleFulfillRequest = async (requestId: string) => {
         if (!selectedMapForRequest) return;
         try {
             await assignTerritoryToRequest(requestId, selectedMapForRequest);
             setFulfillingRequestId(null);
             setSelectedMapForRequest('');
-            await loadData();
+            // A lista de solicitações se atualizará sozinha. Recarregamos os territórios.
+            const t = await fetchAllTerritories();
+            setTerritories(t);
         } catch (e: any) { alert(e.message); }
     };
 
     const handleReject = async (id: string) => {
         if (!confirm("Rejeitar esta solicitação?")) return;
         await rejectRequest(id);
-        await loadData();
+        // A lista se atualiza sozinha.
     };
 
     const handleDeleteTerritory = async (id: string) => {
         if (!confirm("Tem certeza que deseja excluir este território?")) return;
         await deleteTerritory(id);
-        await loadData();
+        await loadData(); // Recarrega territórios
     };
 
     const handleResetTerritory = async (id: string) => {
         if (!confirm("Deseja retomar este território? Ele voltará a ficar disponível sem precisar de relatório.")) return;
         await adminResetTerritory(id);
-        await loadData();
+        await loadData(); // Recarrega territórios
     };
 
     const handlePromote = async (user: User) => {
         const newRole = user.role === 'admin' ? 'user' : 'admin';
         await updateUserRole(user.id, newRole);
-        await loadData();
+        await loadData(); // Recarrega usuários
     };
 
     const sortedTerritories = useMemo(() => {
@@ -393,7 +411,7 @@ const AdminDashboard: React.FC = () => {
                                             <tr key={m.id} className="group hover:bg-gray-50 transition-colors">
                                                 <td className="px-8 py-6">
                                                     <p className="font-black text-gray-900 text-lg">{m.name}</p>
-                                                    <a href={m.pdfUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-500 font-bold hover:underline">Ver Arquivo &rarr;</a>
+                                                    <a href={`${m.pdfUrl}&t=${new Date().getTime()}`} target="_blank" rel="noreferrer" className="text-xs text-blue-500 font-bold hover:underline">Ver Arquivo &rarr;</a>
                                                 </td>
                                                 <td className="px-8 py-6">
                                                     {m.status === TerritoryStatus.IN_USE ? (
