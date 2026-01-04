@@ -25,7 +25,8 @@ import {
     ref, 
     uploadBytes, 
     getDownloadURL, 
-    deleteObject 
+    deleteObject,
+    updateMetadata
 } from 'firebase/storage';
 import { auth, db, storage } from '../firebase/config';
 import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, AppNotification } from '../types';
@@ -186,15 +187,21 @@ export const uploadTerritory = async (name: string, file: File): Promise<void> =
     try {
         const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
         const storageRef = ref(storage, `maps/${fileName}`);
+
+        // Etapa 1: Fazer upload do arquivo.
+        const snapshot = await uploadBytes(storageRef, file);
+
+        // Etapa 2: Atualizar os metadados para garantir a visualização inline.
         const metadata = { 
             contentType: file.type || 'application/pdf',
             contentDisposition: 'inline'
         };
+        await updateMetadata(snapshot.ref, metadata);
         
-        const snapshot = await uploadBytes(storageRef, file, metadata);
+        // Etapa 3: Obter a URL de download e criar o registro no Firestore.
         const fileUrl = await getDownloadURL(snapshot.ref);
-        
         await createTerritory(name, fileUrl);
+        
     } catch (error: any) {
         console.error("Erro no upload:", error);
         throw new Error("Erro ao salvar arquivo no Storage.");

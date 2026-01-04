@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus } from '../types';
 import { 
-    fetchAllTerritories, assignTerritoryToRequest, rejectRequest, uploadTerritory, 
-    updateTerritory, deleteTerritory, fetchAllUsers, updateUserRole, createTerritory, adminResetTerritory
+    assignTerritoryToRequest, rejectRequest, uploadTerritory, 
+    updateTerritory, deleteTerritory, updateUserRole, createTerritory, adminResetTerritory
 } from '../services/api';
 import { formatDate, isRecentWork } from '../utils/helpers';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 
@@ -183,28 +183,56 @@ const AdminDashboard: React.FC = () => {
     const [fulfillingRequestId, setFulfillingRequestId] = useState<string | null>(null);
     const [selectedMapForRequest, setSelectedMapForRequest] = useState<string>('');
 
-    const loadData = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [t, u] = await Promise.all([
-                fetchAllTerritories(),
-                fetchAllUsers()
-            ]);
-            setTerritories(t);
-            setUsers(u);
-        } catch (e) {
-            console.error("Erro ao carregar dados admin:", e);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { loadData(); }, [loadData]);
-
-    // Listener em tempo real para solicitações
+    // Listener para todos os dados em tempo real
     useEffect(() => {
-        const q = query(collection(db, 'requests'), where('status', '==', RequestStatus.PENDING));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        // Listener de Territórios
+        const territoriesQuery = query(collection(db, 'territories'));
+        const unsubscribeTerritories = onSnapshot(territoriesQuery, (snapshot) => {
+            const territoriesList = snapshot.docs.map(doc => {
+                const data = doc.data();
+                const rawHistory = data.history || [];
+                const history = rawHistory.map((h: any) => ({
+                    ...h,
+                    completedDate: h.completedDate instanceof Timestamp 
+                        ? h.completedDate.toDate() 
+                        : new Date(h.completedDate)
+                })).sort((a: any, b: any) => b.completedDate.getTime() - a.completedDate.getTime());
+
+                return {
+                    ...data,
+                    id: doc.id,
+                    name: data.name || 'Sem Nome',
+                    createdAt: data.createdAt?.toDate() || new Date(),
+                    assignmentDate: data.assignmentDate?.toDate() || null,
+                    dueDate: data.dueDate?.toDate() || null,
+                    history: history
+                } as Territory;
+            });
+            setTerritories(territoriesList);
+            if (loading) setLoading(false);
+        }, (error) => {
+            console.error("Erro ao carregar territórios:", error);
+            if (loading) setLoading(false);
+        });
+
+        // Listener de Usuários
+        const usersQuery = query(collection(db, 'users'));
+        const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
+            const usersList = snapshot.docs.map(doc => {
+                 const data = doc.data();
+                 return { 
+                    ...data, 
+                    id: doc.id,
+                    name: data.name || data.email?.split('@')[0] || 'Sem Nome',
+                    createdAt: data.createdAt?.toDate() || new Date()
+                 } as User;
+            }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            setUsers(usersList);
+        });
+        
+        // Listener de Solicitações
+        const requestsQuery = query(collection(db, 'requests'), where('status', '==', RequestStatus.PENDING));
+        const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
             const reqs = snapshot.docs.map(doc => ({
                 ...doc.data(),
                 id: doc.id,
@@ -213,8 +241,12 @@ const AdminDashboard: React.FC = () => {
             setRequests(reqs);
         });
 
-        return () => unsubscribe();
-    }, []);
+        return () => {
+            unsubscribeTerritories();
+            unsubscribeUsers();
+            unsubscribeRequests();
+        };
+    }, [loading]);
 
     const handleFulfillRequest = async (requestId: string) => {
         if (!selectedMapForRequest) return;
@@ -222,34 +254,27 @@ const AdminDashboard: React.FC = () => {
             await assignTerritoryToRequest(requestId, selectedMapForRequest);
             setFulfillingRequestId(null);
             setSelectedMapForRequest('');
-            // A lista de solicitações se atualizará sozinha. Recarregamos os territórios.
-            const t = await fetchAllTerritories();
-            setTerritories(t);
         } catch (e: any) { alert(e.message); }
     };
 
     const handleReject = async (id: string) => {
         if (!confirm("Rejeitar esta solicitação?")) return;
         await rejectRequest(id);
-        // A lista se atualiza sozinha.
     };
 
     const handleDeleteTerritory = async (id: string) => {
         if (!confirm("Tem certeza que deseja excluir este território?")) return;
         await deleteTerritory(id);
-        await loadData(); // Recarrega territórios
     };
 
     const handleResetTerritory = async (id: string) => {
         if (!confirm("Deseja retomar este território? Ele voltará a ficar disponível sem precisar de relatório.")) return;
         await adminResetTerritory(id);
-        await loadData(); // Recarrega territórios
     };
 
     const handlePromote = async (user: User) => {
         const newRole = user.role === 'admin' ? 'user' : 'admin';
         await updateUserRole(user.id, newRole);
-        await loadData(); // Recarrega usuários
     };
 
     const sortedTerritories = useMemo(() => {
@@ -296,8 +321,8 @@ const AdminDashboard: React.FC = () => {
 
     return (
         <div className="max-w-6xl mx-auto space-y-8 pb-20">
-            {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={loadData} />}
-            {editingTerritory && <EditMapModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={loadData} />}
+            {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={() => {}} />}
+            {editingTerritory && <EditMapModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={() => {}} />}
             {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
 
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
