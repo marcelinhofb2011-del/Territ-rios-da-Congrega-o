@@ -100,8 +100,6 @@ const PublisherDashboard: React.FC = () => {
             return;
         }
 
-        setLoading(true);
-
         const territoryQuery = query(collection(db, 'territories'), where('assignedTo', '==', user.id), where('status', '==', TerritoryStatus.IN_USE));
         const unsubscribeTerritory = onSnapshot(territoryQuery, (snapshot) => {
             if (!snapshot.empty) {
@@ -127,7 +125,7 @@ const PublisherDashboard: React.FC = () => {
             } else {
                 setMyTerritory(null);
             }
-            if (loading) setLoading(false);
+            setLoading(false);
         }, (err) => {
             console.error("Erro no listener de território:", err);
             setError('Falha ao carregar seu território.');
@@ -146,7 +144,7 @@ const PublisherDashboard: React.FC = () => {
             unsubscribeTerritory();
             unsubscribeRequest();
         };
-    }, [user, loading]);
+    }, [user]);
 
     const handleRequest = async () => {
         if (!user || actionLoading) return;
