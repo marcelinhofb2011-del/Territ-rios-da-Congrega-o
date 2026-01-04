@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Territory } from '../types';
+import { Territory, RequestStatus, TerritoryStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { fetchPublisherData, requestTerritory, submitReport } from '../services/api';
+import { requestTerritory, submitReport } from '../services/api';
 import { formatDate, getDeadlineColorInfo, getDaysRemaining } from '../utils/helpers';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase/config';
+
 
 const TerritoryHistoryModal: React.FC<{ territory: Territory; onClose: () => void; }> = ({ territory, onClose }) => {
     return (
@@ -91,27 +94,65 @@ const PublisherDashboard: React.FC = () => {
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
 
-    const fetchData = useCallback(async () => {
-        if (!user) return;
-        try {
-            const { myTerritory, hasPendingRequest } = await fetchPublisherData(user.id);
-            setMyTerritory(myTerritory);
-            setHasPendingRequest(hasPendingRequest);
-        } catch (err) {
-            setError('Falha ao carregar seus dados.');
-        } finally {
+    useEffect(() => {
+        if (!user) {
             setLoading(false);
+            return;
         }
-    }, [user]);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+        setLoading(true);
+
+        const territoryQuery = query(collection(db, 'territories'), where('assignedTo', '==', user.id), where('status', '==', TerritoryStatus.IN_USE));
+        const unsubscribeTerritory = onSnapshot(territoryQuery, (snapshot) => {
+            if (!snapshot.empty) {
+                const doc = snapshot.docs[0];
+                const data = doc.data();
+                const territoryData: Territory = {
+                    id: doc.id,
+                    name: data.name || 'Sem Nome',
+                    status: data.status,
+                    pdfUrl: data.pdfUrl,
+                    createdAt: data.createdAt?.toDate() || new Date(),
+                    assignedTo: data.assignedTo,
+                    assignedToName: data.assignedToName,
+                    assignmentDate: data.assignmentDate?.toDate() || null,
+                    dueDate: data.dueDate?.toDate() || null,
+                    permanentNotes: data.permanentNotes || '',
+                    history: (data.history || []).map((h:any) => ({
+                        ...h, 
+                        completedDate: h.completedDate?.toDate() || new Date()
+                    })).sort((a: any, b: any) => b.completedDate.getTime() - a.completedDate.getTime())
+                };
+                setMyTerritory(territoryData);
+            } else {
+                setMyTerritory(null);
+            }
+            if (loading) setLoading(false);
+        }, (err) => {
+            console.error("Erro no listener de território:", err);
+            setError('Falha ao carregar seu território.');
+            setLoading(false);
+        });
+
+        const requestQuery = query(collection(db, 'requests'), where('userId', '==', user.id), where('status', '==', RequestStatus.PENDING));
+        const unsubscribeRequest = onSnapshot(requestQuery, (snapshot) => {
+            setHasPendingRequest(!snapshot.empty);
+        }, (err) => {
+            console.error("Erro no listener de solicitações:", err);
+            setError('Falha ao verificar suas solicitações.');
+        });
+
+        return () => {
+            unsubscribeTerritory();
+            unsubscribeRequest();
+        };
+    }, [user, loading]);
 
     const handleRequest = async () => {
         if (!user || actionLoading) return;
         setActionLoading(true);
         try {
             await requestTerritory(user);
-            await fetchData();
         } catch (err: any) {
             setError(err.message || 'Erro ao solicitar mapa.');
             setTimeout(() => setError(''), 5000);
@@ -125,7 +166,6 @@ const PublisherDashboard: React.FC = () => {
         try {
             await submitReport(user, myTerritory, notes);
             setIsReportModalOpen(false);
-            await fetchData();
         } catch (err: any) {
             console.error("Erro ao devolver:", err);
             setError(`Erro ao devolver território. Verifique as permissões.`);
