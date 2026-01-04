@@ -6,17 +6,38 @@ import { formatDate, getDeadlineColorInfo, getDaysRemaining } from '../utils/hel
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
-
 const MapViewerModal: React.FC<{ url: string; name: string; onClose: () => void }> = ({ url, name, onClose }) => {
+    const cleanUrl = url.split('?')[0].toLowerCase();
+    const isPdf = cleanUrl.endsWith('.pdf');
+    const isImage = /\.(jpeg|jpg|gif|png|webp)$/i.test(cleanUrl);
+    
+    const viewerUrl = isPdf ? `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true` : url;
+
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-80 flex flex-col items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-3xl w-full h-full max-w-6xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-80 flex flex-col items-center justify-center z-50 p-2 sm:p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-3xl w-full h-full max-w-6xl flex flex-col overflow-hidden shadow-2xl">
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
-                    <h2 className="text-lg font-black text-gray-800 truncate pr-4">Visualizando: {name}</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-800 text-3xl font-bold leading-none p-2 rounded-full transition-colors">&times;</button>
+                    <h2 className="text-lg font-black text-gray-800 truncate pr-4">{name}</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-800 text-3xl font-bold leading-none p-2 rounded-full transition-colors -mr-2">&times;</button>
                 </header>
-                <div className="flex-grow w-full h-full">
-                    <iframe src={url} className="w-full h-full border-0" title={`Mapa ${name}`} />
+                <div className="flex-grow w-full h-full bg-gray-200 flex items-center justify-center">
+                    {isPdf ? (
+                        <iframe
+                            src={viewerUrl}
+                            className="w-full h-full border-0"
+                            title={`Mapa ${name}`}
+                            sandbox="allow-scripts allow-same-origin"
+                        />
+                    ) : isImage ? (
+                        <img src={url} alt={`Mapa ${name}`} className="max-w-full max-h-full object-contain" />
+                    ) : (
+                        <div className="text-center p-8">
+                            <p className="font-bold text-gray-700 mb-4">Não é possível pré-visualizar este formato.</p>
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700">
+                                Abrir em Nova Aba
+                            </a>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -108,7 +129,7 @@ const PublisherDashboard: React.FC = () => {
     const [error, setError] = useState('');
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-    const [viewingMapUrl, setViewingMapUrl] = useState<string | null>(null);
+    const [viewingMap, setViewingMap] = useState<Territory | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
 
     useEffect(() => {
@@ -215,7 +236,7 @@ const PublisherDashboard: React.FC = () => {
             
             {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl border border-red-100 font-bold animate-in fade-in slide-in-from-top-2">{error}</div>}
 
-            {viewingMapUrl && myTerritory && <MapViewerModal url={viewingMapUrl} name={myTerritory.name} onClose={() => setViewingMapUrl(null)} />}
+            {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} onClose={() => setViewingMap(null)} />}
             {isReportModalOpen && myTerritory && <ReportModal territory={myTerritory} onClose={() => setIsReportModalOpen(false)} onSubmit={handleSubmitReport} />}
             {isHistoryModalOpen && myTerritory && <TerritoryHistoryModal territory={myTerritory} onClose={() => setIsHistoryModalOpen(false)} />}
 
@@ -259,7 +280,7 @@ const PublisherDashboard: React.FC = () => {
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <button onClick={() => setViewingMapUrl(myTerritory.pdfUrl)} className="flex items-center justify-center gap-3 py-5 bg-gray-900 text-white font-black rounded-3xl hover:bg-black transition-all transform active:scale-95 shadow-xl shadow-gray-200">
+                                    <button onClick={() => setViewingMap(myTerritory)} className="flex items-center justify-center gap-3 py-5 bg-gray-900 text-white font-black rounded-3xl hover:bg-black transition-all transform active:scale-95 shadow-xl shadow-gray-200">
                                         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                         VER MAPA
                                     </button>
