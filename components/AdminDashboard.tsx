@@ -181,7 +181,7 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-gray-500 font-medium mt-1">Gestão de Congregação</p>
                     </div>
                 </div>
-                <div className="flex bg-white/40 backdrop-blur-sm p-1.5 rounded-2xl self-start md:self-auto border border-white/50">
+                <div className="flex bg-white/60 p-1.5 rounded-2xl self-start md:self-auto border border-white/50">
                     <button 
                         onClick={() => setActiveTab('territories')} 
                         className={`px-6 py-2 text-sm font-bold rounded-xl transition-all ${activeTab === 'territories' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
@@ -207,7 +207,7 @@ const AdminDashboard: React.FC = () => {
                             { label: 'Em Descanso', value: stats.resting, color: 'text-amber-500' },
                             { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600' }
                         ].map(s => (
-                            <div key={s.label} className="bg-white/50 backdrop-blur-xl p-6 rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60">
+                            <div key={s.label} className="bg-white/70 p-6 rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60">
                                 <p className="text-xs font-black text-gray-400 uppercase mb-1">{s.label}</p>
                                 <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
                             </div>
@@ -216,14 +216,14 @@ const AdminDashboard: React.FC = () => {
 
                     {/* Solicitações Pendentes */}
                     {requests.length > 0 && (
-                        <div className="bg-white/30 backdrop-blur-xl border border-white/40 rounded-[2rem] p-8 shadow-2xl shadow-violet-200/40">
+                        <div className="bg-white/50 border border-white/40 rounded-[2rem] p-8 shadow-2xl shadow-violet-200/40">
                             <h2 className="text-xl font-black text-blue-900 mb-6 flex items-center gap-2">
                                 <span className="flex h-3 w-3 rounded-full bg-blue-600 animate-pulse"></span>
                                 Solicitações Pendentes ({requests.length})
                             </h2>
                             <div className="space-y-4">
                                 {requests.map(req => (
-                                    <div key={req.id} className="bg-white/70 p-6 rounded-2xl shadow-lg shadow-indigo-100/50 flex flex-col md:flex-row items-center justify-between gap-6 border border-white/50">
+                                    <div key={req.id} className="bg-white/80 p-6 rounded-2xl shadow-lg shadow-indigo-100/50 flex flex-col md:flex-row items-center justify-between gap-6 border border-white/50">
                                         <div>
                                             <p className="font-black text-gray-900 text-lg">{req.userName}</p>
                                             <p className="text-sm text-gray-500 font-medium">Solicitado em {formatDate(req.requestDate)}</p>
@@ -259,7 +259,7 @@ const AdminDashboard: React.FC = () => {
                     )}
 
                     {/* Lista de Mapas */}
-                    <div className="bg-white/50 backdrop-blur-xl rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60 overflow-hidden">
+                    <div className="bg-white/70 rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60 overflow-hidden">
                         <div className="p-8 border-b border-white/30 flex justify-between items-center">
                             <h2 className="text-2xl font-black text-gray-800">Mapas da Congregação</h2>
                             <button onClick={() => setShowAddModal(true)} className="px-6 py-3 bg-gray-900 text-white font-black rounded-xl hover:bg-black transition-all transform active:scale-95 shadow-xl shadow-gray-200">
@@ -327,7 +327,7 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 </>
             ) : (
-                <div className="bg-white/50 backdrop-blur-xl rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60 overflow-hidden">
+                <div className="bg-white/70 rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60 overflow-hidden">
                     <div className="p-8 border-b border-white/30">
                         <h2 className="text-2xl font-black text-gray-800">Usuários Cadastrados</h2>
                     </div>
