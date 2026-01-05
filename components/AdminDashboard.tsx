@@ -181,7 +181,7 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-gray-500 font-medium mt-1">Gestão de Congregação</p>
                     </div>
                 </div>
-                <div className="flex bg-white/60 p-1.5 rounded-2xl self-start md:self-auto border border-white/50">
+                <div className="flex bg-white/60 p-1.5 rounded-2xl self-start md:self-auto border-2 border-slate-200">
                     <button 
                         onClick={() => setActiveTab('territories')} 
                         className={`px-6 py-2 text-sm font-bold rounded-xl transition-all ${activeTab === 'territories' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
@@ -207,7 +207,7 @@ const AdminDashboard: React.FC = () => {
                             { label: 'Em Descanso', value: stats.resting, color: 'text-amber-500' },
                             { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600' }
                         ].map(s => (
-                            <div key={s.label} className="bg-white/70 p-6 rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60">
+                            <div key={s.label} className="bg-white/70 p-6 rounded-3xl border-2 border-slate-200 shadow-2xl shadow-violet-200/60">
                                 <p className="text-xs font-black text-gray-400 uppercase mb-1">{s.label}</p>
                                 <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
                             </div>
@@ -216,14 +216,14 @@ const AdminDashboard: React.FC = () => {
 
                     {/* Solicitações Pendentes */}
                     {requests.length > 0 && (
-                        <div className="bg-white/50 border border-white/40 rounded-[2rem] p-8 shadow-2xl shadow-violet-200/40">
+                        <div className="bg-white/50 border-2 border-slate-200 rounded-[2rem] p-8 shadow-2xl shadow-violet-200/40">
                             <h2 className="text-xl font-black text-blue-900 mb-6 flex items-center gap-2">
                                 <span className="flex h-3 w-3 rounded-full bg-blue-600 animate-pulse"></span>
                                 Solicitações Pendentes ({requests.length})
                             </h2>
                             <div className="space-y-4">
                                 {requests.map(req => (
-                                    <div key={req.id} className="bg-white/80 p-6 rounded-2xl shadow-lg shadow-indigo-100/50 flex flex-col md:flex-row items-center justify-between gap-6 border border-white/50">
+                                    <div key={req.id} className="bg-white/80 p-6 rounded-2xl shadow-lg shadow-indigo-100/50 flex flex-col md:flex-row items-center justify-between gap-6 border-2 border-slate-200">
                                         <div>
                                             <p className="font-black text-gray-900 text-lg">{req.userName}</p>
                                             <p className="text-sm text-gray-500 font-medium">Solicitado em {formatDate(req.requestDate)}</p>
@@ -259,107 +259,86 @@ const AdminDashboard: React.FC = () => {
                     )}
 
                     {/* Lista de Mapas */}
-                    <div className="bg-white/70 rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60 overflow-hidden">
-                        <div className="p-8 border-b border-white/30 flex justify-between items-center">
+                    <div className="bg-white/70 rounded-3xl border-2 border-slate-200 shadow-2xl shadow-violet-200/60 overflow-hidden">
+                        <div className="p-8 border-b-2 border-slate-200 flex justify-between items-center">
                             <h2 className="text-2xl font-black text-gray-800">Mapas da Congregação</h2>
                             <button onClick={() => setShowAddModal(true)} className="px-6 py-3 bg-gray-900 text-white font-black rounded-xl hover:bg-black transition-all transform active:scale-95 shadow-xl shadow-gray-200">
                                 + NOVO MAPA
                             </button>
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="text-xs font-black text-indigo-900/70 uppercase tracking-widest bg-white/20">
-                                        <th className="px-8 py-5">Identificação</th>
-                                        <th className="px-8 py-5">Status</th>
-                                        <th className="px-8 py-5">Responsável</th>
-                                        <th className="px-8 py-5">Último Trabalho</th>
-                                        <th className="px-8 py-5 text-right">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/30">
-                                    {sortedTerritories.map(m => {
-                                        const recent = isRecentWork(m.history);
-                                        return (
-                                            <tr key={m.id} className="group hover:bg-white/20 transition-colors">
-                                                <td className="px-8 py-6">
-                                                    <p className="font-black text-gray-900 text-lg">{m.name}</p>
-                                                    <button onClick={() => setViewingMap(m)} className="text-xs text-blue-500 font-bold hover:underline">Ver Arquivo &rarr;</button>
-                                                </td>
-                                                <td className="px-8 py-6">
-                                                    {m.status === TerritoryStatus.IN_USE ? (
-                                                        <span className="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-black uppercase">Em Uso</span>
-                                                    ) : recent ? (
-                                                        <span className="px-4 py-1.5 bg-amber-50 text-amber-600 rounded-full text-xs font-black uppercase">Descanso</span>
-                                                    ) : (
-                                                        <span className="px-4 py-1.5 bg-emerald-50 text-emerald-600 rounded-full text-xs font-black uppercase">Disponível</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-8 py-6">
-                                                    <p className="font-bold text-gray-700">{m.assignedToName || '-'}</p>
-                                                    {m.dueDate && <p className="text-xs text-red-500 font-bold">Vence em {formatDate(m.dueDate)}</p>}
-                                                </td>
-                                                <td className="px-8 py-6">
-                                                    <p className="text-sm font-bold text-gray-600">{m.history && m.history.length > 0 ? formatDate(m.history[0].completedDate) : 'Nunca'}</p>
-                                                </td>
-                                                <td className="px-8 py-6 text-right space-x-1">
-                                                    <button onClick={() => setEditingTerritory(m)} className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all" title="Editar Mapa">
-                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg>
-                                                    </button>
-                                                    <button onClick={() => setViewHistory(m)} className="p-3 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Histórico">
-                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                                    </button>
-                                                    {m.status === TerritoryStatus.IN_USE && (
-                                                        <button onClick={() => handleResetTerritory(m.id)} className="p-3 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all" title="Retomar Mapa">
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg>
-                                                        </button>
-                                                    )}
-                                                    <button onClick={() => handleDeleteTerritory(m.id)} className="p-3 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Excluir">
-                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-100/50">
+                            {sortedTerritories.map(m => {
+                                const recent = isRecentWork(m.history);
+                                return (
+                                    <div key={m.id} className="bg-white/80 p-6 rounded-2xl shadow-lg shadow-indigo-100/50 flex flex-col gap-4 border-[5px] border-slate-200">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="font-black text-gray-900 text-xl">{m.name}</p>
+                                                <button onClick={() => setViewingMap(m)} className="text-xs text-blue-500 font-bold hover:underline">Ver Arquivo &rarr;</button>
+                                            </div>
+                                            {m.status === TerritoryStatus.IN_USE ? (
+                                                <span className="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-black uppercase">Em Uso</span>
+                                            ) : recent ? (
+                                                <span className="px-4 py-1.5 bg-amber-50 text-amber-600 rounded-full text-xs font-black uppercase">Descanso</span>
+                                            ) : (
+                                                <span className="px-4 py-1.5 bg-emerald-50 text-emerald-600 rounded-full text-xs font-black uppercase">Disponível</span>
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-400 uppercase">Responsável</p>
+                                                <p className="font-bold text-gray-700 truncate">{m.assignedToName || '-'}</p>
+                                                {m.dueDate && <p className="text-xs text-red-500 font-bold">Vence em {formatDate(m.dueDate)}</p>}
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-400 uppercase">Último Trabalho</p>
+                                                <p className="text-sm font-bold text-gray-600">{m.history && m.history.length > 0 ? formatDate(m.history[0].completedDate) : 'Nunca'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="border-t border-slate-200/80 mt-2 pt-4 flex justify-end gap-1">
+                                             <button onClick={() => setEditingTerritory(m)} className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all" title="Editar Mapa">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg>
+                                            </button>
+                                            <button onClick={() => setViewHistory(m)} className="p-3 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Histórico">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                            </button>
+                                            {m.status === TerritoryStatus.IN_USE && (
+                                                <button onClick={() => handleResetTerritory(m.id)} className="p-3 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all" title="Retomar Mapa">
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg>
+                                                </button>
+                                            )}
+                                            <button onClick={() => handleDeleteTerritory(m.id)} className="p-3 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Excluir">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </>
             ) : (
-                <div className="bg-white/70 rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60 overflow-hidden">
-                    <div className="p-8 border-b border-white/30">
+                <div className="bg-white/70 rounded-3xl border-2 border-slate-200 shadow-2xl shadow-violet-200/60 overflow-hidden">
+                    <div className="p-8 border-b-2 border-slate-200">
                         <h2 className="text-2xl font-black text-gray-800">Usuários Cadastrados</h2>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="text-xs font-black text-indigo-900/70 uppercase tracking-widest bg-white/20">
-                                    <th className="px-8 py-5">Nome</th>
-                                    <th className="px-8 py-5">Email</th>
-                                    <th className="px-8 py-5">Cargo</th>
-                                    <th className="px-8 py-5 text-right">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/30">
-                                {users.map(u => (
-                                    <tr key={u.id} className="group hover:bg-white/20 transition-colors">
-                                        <td className="px-8 py-6 font-black text-gray-900">{u.name}</td>
-                                        <td className="px-8 py-6 font-medium text-gray-500">{u.email}</td>
-                                        <td className="px-8 py-6">
-                                            <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase ${u.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-gray-100 text-gray-500'}`}>
-                                                {u.role}
-                                            </span>
-                                        </td>
-                                        <td className="px-8 py-6 text-right">
-                                            <button onClick={() => handlePromote(u)} className="px-4 py-2 bg-gray-100 text-gray-600 text-xs font-black rounded-lg hover:bg-gray-900 hover:text-white transition-all">
-                                                ALTERAR CARGO
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-100/50">
+                        {users.map(u => (
+                            <div key={u.id} className="bg-white/80 p-6 rounded-2xl shadow-lg flex items-center justify-between gap-4 border-[5px] border-slate-200">
+                                <div className="flex-1">
+                                    <p className="font-black text-gray-900 text-lg truncate">{u.name}</p>
+                                    <p className="font-medium text-gray-500 text-sm truncate">{u.email}</p>
+                                    <span className={`mt-2 inline-block px-3 py-1 rounded-full text-xs font-black uppercase ${u.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-gray-100 text-gray-500'}`}>
+                                        {u.role}
+                                    </span>
+                                </div>
+                                <div className="flex-shrink-0">
+                                    <button onClick={() => handlePromote(u)} className="px-4 py-2 bg-gray-100 text-gray-600 text-xs font-black rounded-lg hover:bg-gray-900 hover:text-white transition-all">
+                                        ALTERAR CARGO
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
