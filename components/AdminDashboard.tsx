@@ -11,6 +11,7 @@ import MapViewerModal from './modals/MapViewerModal';
 import TerritoryHistoryModal from './modals/TerritoryHistoryModal';
 import AddMapModal from './modals/AddMapModal';
 import EditMapModal from './modals/EditMapModal';
+import { MapIcon } from './Icon';
 
 const AdminDashboard: React.FC = () => {
     const [territories, setTerritories] = useState<Territory[]>([]);
@@ -172,22 +173,24 @@ const AdminDashboard: React.FC = () => {
 
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div className="flex items-center gap-4">
-                    <div className="text-4xl p-3 bg-white rounded-2xl shadow-sm border border-gray-100">🗺️</div>
+                    <div className="w-16 h-16 bg-white rounded-full shadow-sm border border-gray-100 overflow-hidden">
+                        <MapIcon className="w-full h-full"/>
+                    </div>
                     <div>
                         <h1 className="text-4xl font-black text-gray-900 tracking-tight">Painel Admin</h1>
                         <p className="text-gray-500 font-medium mt-1">Gestão de Congregação</p>
                     </div>
                 </div>
-                <div className="flex bg-gray-200/50 p-1.5 rounded-2xl self-start md:self-auto">
+                <div className="flex bg-white/40 backdrop-blur-sm p-1.5 rounded-2xl self-start md:self-auto border border-white/50">
                     <button 
                         onClick={() => setActiveTab('territories')} 
-                        className={`px-6 py-2 text-sm font-bold rounded-xl transition-all ${activeTab === 'territories' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}
+                        className={`px-6 py-2 text-sm font-bold rounded-xl transition-all ${activeTab === 'territories' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
                     >
                         Mapas
                     </button>
                     <button 
                         onClick={() => setActiveTab('users')} 
-                        className={`px-6 py-2 text-sm font-bold rounded-xl transition-all ${activeTab === 'users' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}
+                        className={`px-6 py-2 text-sm font-bold rounded-xl transition-all ${activeTab === 'users' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
                     >
                         Usuários
                     </button>
@@ -204,7 +207,7 @@ const AdminDashboard: React.FC = () => {
                             { label: 'Em Descanso', value: stats.resting, color: 'text-amber-500' },
                             { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600' }
                         ].map(s => (
-                            <div key={s.label} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                            <div key={s.label} className="bg-white/50 backdrop-blur-xl p-6 rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60">
                                 <p className="text-xs font-black text-gray-400 uppercase mb-1">{s.label}</p>
                                 <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
                             </div>
@@ -213,14 +216,14 @@ const AdminDashboard: React.FC = () => {
 
                     {/* Solicitações Pendentes */}
                     {requests.length > 0 && (
-                        <div className="bg-blue-50 border border-blue-100 rounded-[2rem] p-8">
+                        <div className="bg-white/30 backdrop-blur-xl border border-white/40 rounded-[2rem] p-8 shadow-2xl shadow-violet-200/40">
                             <h2 className="text-xl font-black text-blue-900 mb-6 flex items-center gap-2">
                                 <span className="flex h-3 w-3 rounded-full bg-blue-600 animate-pulse"></span>
                                 Solicitações Pendentes ({requests.length})
                             </h2>
                             <div className="space-y-4">
                                 {requests.map(req => (
-                                    <div key={req.id} className="bg-white p-6 rounded-2xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 border border-blue-50">
+                                    <div key={req.id} className="bg-white/70 p-6 rounded-2xl shadow-lg shadow-indigo-100/50 flex flex-col md:flex-row items-center justify-between gap-6 border border-white/50">
                                         <div>
                                             <p className="font-black text-gray-900 text-lg">{req.userName}</p>
                                             <p className="text-sm text-gray-500 font-medium">Solicitado em {formatDate(req.requestDate)}</p>
@@ -256,8 +259,8 @@ const AdminDashboard: React.FC = () => {
                     )}
 
                     {/* Lista de Mapas */}
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden">
-                        <div className="p-8 border-b border-gray-50 flex justify-between items-center">
+                    <div className="bg-white/50 backdrop-blur-xl rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60 overflow-hidden">
+                        <div className="p-8 border-b border-white/30 flex justify-between items-center">
                             <h2 className="text-2xl font-black text-gray-800">Mapas da Congregação</h2>
                             <button onClick={() => setShowAddModal(true)} className="px-6 py-3 bg-gray-900 text-white font-black rounded-xl hover:bg-black transition-all transform active:scale-95 shadow-xl shadow-gray-200">
                                 + NOVO MAPA
@@ -266,7 +269,7 @@ const AdminDashboard: React.FC = () => {
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="text-xs font-black text-gray-400 uppercase tracking-widest bg-gray-50/50">
+                                    <tr className="text-xs font-black text-indigo-900/70 uppercase tracking-widest bg-white/20">
                                         <th className="px-8 py-5">Identificação</th>
                                         <th className="px-8 py-5">Status</th>
                                         <th className="px-8 py-5">Responsável</th>
@@ -274,11 +277,11 @@ const AdminDashboard: React.FC = () => {
                                         <th className="px-8 py-5 text-right">Ações</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-50">
+                                <tbody className="divide-y divide-white/30">
                                     {sortedTerritories.map(m => {
                                         const recent = isRecentWork(m.history);
                                         return (
-                                            <tr key={m.id} className="group hover:bg-gray-50 transition-colors">
+                                            <tr key={m.id} className="group hover:bg-white/20 transition-colors">
                                                 <td className="px-8 py-6">
                                                     <p className="font-black text-gray-900 text-lg">{m.name}</p>
                                                     <button onClick={() => setViewingMap(m)} className="text-xs text-blue-500 font-bold hover:underline">Ver Arquivo &rarr;</button>
@@ -324,23 +327,23 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 </>
             ) : (
-                <div className="bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden">
-                    <div className="p-8 border-b border-gray-50">
+                <div className="bg-white/50 backdrop-blur-xl rounded-3xl border border-white/60 shadow-2xl shadow-violet-200/60 overflow-hidden">
+                    <div className="p-8 border-b border-white/30">
                         <h2 className="text-2xl font-black text-gray-800">Usuários Cadastrados</h2>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
-                                <tr className="text-xs font-black text-gray-400 uppercase tracking-widest bg-gray-50/50">
+                                <tr className="text-xs font-black text-indigo-900/70 uppercase tracking-widest bg-white/20">
                                     <th className="px-8 py-5">Nome</th>
                                     <th className="px-8 py-5">Email</th>
                                     <th className="px-8 py-5">Cargo</th>
                                     <th className="px-8 py-5 text-right">Ações</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-white/30">
                                 {users.map(u => (
-                                    <tr key={u.id} className="group hover:bg-gray-50 transition-colors">
+                                    <tr key={u.id} className="group hover:bg-white/20 transition-colors">
                                         <td className="px-8 py-6 font-black text-gray-900">{u.name}</td>
                                         <td className="px-8 py-6 font-medium text-gray-500">{u.email}</td>
                                         <td className="px-8 py-6">

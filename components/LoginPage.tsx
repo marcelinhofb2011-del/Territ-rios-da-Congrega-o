@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { MapIcon } from './Icon';
 
 const LoginPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -48,8 +49,8 @@ const LoginPage: React.FC = () => {
       <div className="max-w-md w-full">
         {/* Logo Section */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-3xl shadow-xl border border-slate-200 mb-4 text-4xl">
-            🗺️
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-full shadow-xl border border-slate-200 mb-4 overflow-hidden">
+            <MapIcon className="w-full h-full"/>
           </div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">territorio</h1>
           <p className="text-slate-600 font-bold mt-2">Gestão Inteligente de Congregação</p>

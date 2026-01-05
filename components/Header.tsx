@@ -6,6 +6,7 @@ import { markNotificationsAsRead } from '../services/api';
 import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, limit } from 'firebase/firestore';
 import { formatDate } from '../utils/helpers';
+import { MapIcon } from './Icon';
 
 const Header: React.FC = () => {
   const { user, logout } = useAuth();
@@ -74,8 +75,8 @@ const Header: React.FC = () => {
     <header className="bg-white border-b border-gray-100 sticky top-0 z-40 backdrop-blur-md bg-white/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 flex items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 shadow-sm overflow-hidden text-3xl">
-             🗺️
+          <div className="w-12 h-12 flex items-center justify-center rounded-full shadow-sm overflow-hidden">
+             <MapIcon className="w-full h-full"/>
           </div>
           <div>
             <h1 className="text-xl font-black text-gray-900 tracking-tight leading-none">territorio</h1>
