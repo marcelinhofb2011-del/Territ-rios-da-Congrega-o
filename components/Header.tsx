@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { AppNotification } from '../types';
@@ -80,7 +79,7 @@ const Header: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl font-black text-gray-900 tracking-tight leading-none">territorio</h1>
-            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1">Congregação</p>
+            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1">{user.role === 'admin' ? 'ADM' : 'Congregação'}</p>
           </div>
         </div>
 

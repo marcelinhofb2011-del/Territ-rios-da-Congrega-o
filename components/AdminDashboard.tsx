@@ -168,17 +168,7 @@ const AdminDashboard: React.FC = () => {
             {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
             {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} onClose={() => setViewingMap(null)} />}
 
-            {/* Cabeçalho Limpo - Sem Container */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-1">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-slate-200 flex-shrink-0">
-                        <MapIcon className="w-full h-full"/>
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none">Administração</h1>
-                        <p className="text-slate-400 font-bold text-xs mt-1 uppercase tracking-wider">Gestão Territorial</p>
-                    </div>
-                </div>
+            <div className="flex flex-col md:flex-row md:items-center justify-end gap-6 px-1">
                 <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-200 self-start md:self-auto">
                     <button 
                         onClick={() => setActiveTab('territories')} 
