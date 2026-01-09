@@ -24,6 +24,7 @@ export interface User {
 export interface TerritoryHistory {
   userId: string;
   userName: string;
+  assignmentDate: Date;
   completedDate: Date;
   notes?: string;
 }

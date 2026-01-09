@@ -14,12 +14,20 @@ const TerritoryHistoryModal: React.FC<{ territory: Territory; onClose: () => voi
                     {territory.history && territory.history.length > 0 ? (
                         <ul className="space-y-4">
                             {territory.history.map((entry, index) => (
-                                <li key={index} className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <p className="font-black text-gray-800">{entry.userName}</p>
-                                        <p className="text-xs font-bold text-gray-400 uppercase">{formatDate(entry.completedDate)}</p>
+                                <li key={index} className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
+                                    <div className="flex justify-between items-start">
+                                        <p className="font-black text-slate-800 text-lg">{entry.userName}</p>
                                     </div>
-                                    {entry.notes && <p className="text-sm text-gray-600 italic leading-relaxed">"{entry.notes}"</p>}
+                                    <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-wider bg-white px-3 py-2 rounded-lg border border-slate-100">
+                                        <span>Designado: {formatDate(entry.assignmentDate)}</span>
+                                        <span className="font-sans text-slate-300">&rarr;</span>
+                                        <span>Devolvido: {formatDate(entry.completedDate)}</span>
+                                    </div>
+                                    {entry.notes && (
+                                        <div className="pt-3 border-t border-slate-100">
+                                            <p className="text-sm text-slate-600 italic leading-relaxed">"{entry.notes}"</p>
+                                        </div>
+                                    )}
                                 </li>
                             ))}
                         </ul>

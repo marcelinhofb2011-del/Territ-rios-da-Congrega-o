@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus } from '../types';
 import { 
@@ -13,8 +12,10 @@ import TerritoryHistoryModal from './modals/TerritoryHistoryModal';
 import AddMapModal from './modals/AddMapModal';
 import EditMapModal from './modals/EditMapModal';
 import { MapIcon } from './Icon';
+import { useAuth } from '../hooks/useAuth';
 
 const AdminDashboard: React.FC = () => {
+    const { user } = useAuth();
     const [territories, setTerritories] = useState<Territory[]>([]);
     const [requests, setRequests] = useState<TerritoryRequest[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -36,12 +37,14 @@ const AdminDashboard: React.FC = () => {
             const territoriesList = snapshot.docs.map(doc => {
                 const data = doc.data();
                 const rawHistory = data.history || [];
-                const history = rawHistory.map((h: any) => ({
-                    ...h,
-                    completedDate: h.completedDate instanceof Timestamp 
-                        ? h.completedDate.toDate() 
-                        : new Date(h.completedDate)
-                })).sort((a: any, b: any) => b.completedDate.getTime() - a.completedDate.getTime());
+                const history = rawHistory.map((h: any) => {
+                    const completed = h.completedDate?.toDate() ?? new Date();
+                    return {
+                        ...h,
+                        assignmentDate: h.assignmentDate?.toDate() ?? completed,
+                        completedDate: completed
+                    };
+                }).sort((a,b) => b.completedDate.getTime() - a.completedDate.getTime());
 
                 return {
                     ...data,
@@ -108,8 +111,12 @@ const AdminDashboard: React.FC = () => {
     };
 
     const handleResetTerritory = async (id: string) => {
-        if (!confirm("Deseja retomar este território? Ele voltará a ficar disponível sem precisar de relatório.")) return;
-        await adminResetTerritory(id);
+        if (!user) {
+            alert("Erro: usuário administrador não encontrado.");
+            return;
+        }
+        if (!confirm("Deseja retomar este território? Ele voltará a ficar disponível e a ação será registrada no histórico.")) return;
+        await adminResetTerritory(id, user);
     };
 
     const handlePromote = async (user: User) => {

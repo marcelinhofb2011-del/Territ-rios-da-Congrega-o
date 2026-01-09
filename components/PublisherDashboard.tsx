@@ -3,7 +3,7 @@ import { Territory, RequestStatus, TerritoryStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { requestTerritory, submitReport } from '../services/api';
 import { formatDate, getDeadlineColorInfo, getDaysRemaining } from '../utils/helpers';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import MapViewerModal from './modals/MapViewerModal';
 import TerritoryHistoryModal from './modals/TerritoryHistoryModal';
@@ -31,6 +31,16 @@ const PublisherDashboard: React.FC = () => {
             if (!snapshot.empty) {
                 const doc = snapshot.docs[0];
                 const data = doc.data();
+                const rawHistory = data.history || [];
+                const history = rawHistory.map((h: any) => {
+                    const completed = h.completedDate?.toDate() ?? new Date();
+                    return {
+                        ...h,
+                        assignmentDate: h.assignmentDate?.toDate() ?? completed,
+                        completedDate: completed
+                    };
+                }).sort((a,b) => b.completedDate.getTime() - a.completedDate.getTime());
+
                 const territoryData: Territory = {
                     id: doc.id,
                     name: data.name || 'Sem Nome',
@@ -42,10 +52,7 @@ const PublisherDashboard: React.FC = () => {
                     assignmentDate: data.assignmentDate?.toDate() || null,
                     dueDate: data.dueDate?.toDate() || null,
                     permanentNotes: data.permanentNotes || '',
-                    history: (data.history || []).map((h:any) => ({
-                        ...h, 
-                        completedDate: h.completedDate?.toDate() || new Date()
-                    })).sort((a: any, b: any) => b.completedDate.getTime() - a.completedDate.getTime())
+                    history: history
                 };
                 setMyTerritory(territoryData);
             } else {

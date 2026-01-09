@@ -1,4 +1,3 @@
-
 import { 
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
@@ -29,7 +28,7 @@ import {
     updateMetadata
 } from 'firebase/storage';
 import { auth, db, storage } from '../firebase/config';
-import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, AppNotification } from '../types';
+import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, AppNotification, TerritoryHistory } from '../types';
 
 // --- AUTH FUNCTIONS ---
 
@@ -126,6 +125,33 @@ export const apiLogout = async (): Promise<void> => {
     await signOut(auth);
 };
 
+// --- HELPERS ---
+const hydrateHistory = (rawHistory: any[]): TerritoryHistory[] => {
+    if (!rawHistory || rawHistory.length === 0) return [];
+    
+    return rawHistory.map((h: any) => {
+        const completedDate = h.completedDate instanceof Timestamp 
+            ? h.completedDate.toDate() 
+            : new Date(h.completedDate || Date.now());
+
+        let assignmentDate;
+        if (h.assignmentDate) {
+            assignmentDate = h.assignmentDate instanceof Timestamp 
+                ? h.assignmentDate.toDate() 
+                : new Date(h.assignmentDate);
+        } else {
+            assignmentDate = completedDate; // Fallback para registros antigos
+        }
+
+        return {
+            ...h,
+            assignmentDate,
+            completedDate,
+        };
+    }).sort((a, b) => b.completedDate.getTime() - a.completedDate.getTime());
+};
+
+
 // --- TERRITORY FUNCTIONS ---
 
 export const fetchAllTerritories = async (): Promise<Territory[]> => {
@@ -135,15 +161,6 @@ export const fetchAllTerritories = async (): Promise<Territory[]> => {
         
         const list = querySnapshot.docs.map(doc => {
             const data = doc.data();
-            const rawHistory = data.history || [];
-            
-            const history = rawHistory.map((h: any) => ({
-                ...h,
-                completedDate: h.completedDate instanceof Timestamp 
-                    ? h.completedDate.toDate() 
-                    : new Date(h.completedDate)
-            })).sort((a: any, b: any) => b.completedDate.getTime() - a.completedDate.getTime());
-
             return {
                 ...data,
                 id: doc.id,
@@ -151,7 +168,7 @@ export const fetchAllTerritories = async (): Promise<Territory[]> => {
                 createdAt: data.createdAt?.toDate() || new Date(),
                 assignmentDate: data.assignmentDate?.toDate() || null,
                 dueDate: data.dueDate?.toDate() || null,
-                history: history
+                history: hydrateHistory(data.history || [])
             } as Territory;
         });
 
@@ -190,10 +207,9 @@ export const uploadTerritory = async (name: string, file: File): Promise<void> =
 
         const metadata = { 
             contentType: file.type || 'application/pdf',
-            contentDisposition: 'inline' // Garante que o navegador tente exibir o arquivo em vez de baixar.
+            contentDisposition: 'inline'
         };
 
-        // Faz o upload do arquivo já com os metadados corretos em uma única operação.
         const snapshot = await uploadBytes(storageRef, file, metadata);
         
         const fileUrl = await getDownloadURL(snapshot.ref);
@@ -225,16 +241,39 @@ export const deleteTerritory = async (territoryId: string): Promise<void> => {
     await deleteDoc(docRef);
 };
 
-export const adminResetTerritory = async (territoryId: string): Promise<void> => {
+export const adminResetTerritory = async (territoryId: string, adminUser: User): Promise<void> => {
     const territoryRef = doc(db, 'territories', territoryId);
-    await updateDoc(territoryRef, {
-        status: TerritoryStatus.AVAILABLE,
-        assignedTo: null,
-        assignedToName: null,
-        assignmentDate: null,
-        dueDate: null
+    
+    await runTransaction(db, async (transaction) => {
+        const territoryDoc = await transaction.get(territoryRef);
+        if (!territoryDoc.exists()) throw new Error("Território não encontrado.");
+
+        const territoryData = territoryDoc.data();
+        let newHistory = territoryData.history || [];
+
+        // Adiciona um registro histórico apenas se o território estava de fato com alguém
+        if (territoryData.assignedTo) {
+            const historyEntry = {
+                userId: territoryData.assignedTo,
+                userName: territoryData.assignedToName,
+                assignmentDate: territoryData.assignmentDate, // Já está como Timestamp do Firestore
+                completedDate: Timestamp.now(),
+                notes: `Território retomado pelo administrador (${adminUser.name}).`
+            };
+            newHistory.push(historyEntry);
+        }
+        
+        transaction.update(territoryRef, {
+            status: TerritoryStatus.AVAILABLE,
+            assignedTo: null,
+            assignedToName: null,
+            assignmentDate: null,
+            dueDate: null,
+            history: newHistory
+        });
     });
 };
+
 
 // --- USER MANAGEMENT ---
 
@@ -349,27 +388,16 @@ export const submitReport = async (user: User, territory: Territory, notes: stri
     const historyEntry = {
         userId: user.id,
         userName: user.name,
+        assignmentDate: territory.assignmentDate ? Timestamp.fromDate(territory.assignmentDate) : Timestamp.now(),
         completedDate: Timestamp.now(),
         notes: notes.trim()
     };
-
-    const currentHistory = (territory.history || []).map(h => {
-        // Explicitamente recria o objeto para evitar espalhar propriedades/referências internas do Firebase
-        const cleanEntry: {
-            userId: string;
-            userName: string;
-            completedDate: Timestamp;
-            notes?: string;
-        } = {
-            userId: h.userId,
-            userName: h.userName,
-            completedDate: Timestamp.fromDate(h.completedDate instanceof Date ? h.completedDate : new Date(h.completedDate)),
-        };
-        if (h.notes) {
-            cleanEntry.notes = h.notes;
-        }
-        return cleanEntry;
-    });
+    
+    const currentHistory = territory.history.map(h => ({
+        ...h,
+        assignmentDate: Timestamp.fromDate(h.assignmentDate),
+        completedDate: Timestamp.fromDate(h.completedDate)
+    }));
 
     await updateDoc(territoryRef, {
         status: TerritoryStatus.AVAILABLE,
@@ -420,10 +448,7 @@ export const fetchPublisherData = async (userId: string): Promise<{ myTerritory:
             assignmentDate: data.assignmentDate?.toDate() || null,
             dueDate: data.dueDate?.toDate() || null,
             permanentNotes: data.permanentNotes || '',
-            history: (data.history || []).map((h:any) => ({
-                ...h, 
-                completedDate: h.completedDate?.toDate() || new Date()
-            }))
+            history: hydrateHistory(data.history || [])
         };
     }
     
