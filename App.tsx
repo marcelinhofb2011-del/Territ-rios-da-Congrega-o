@@ -25,7 +25,7 @@ const AppContent: React.FC = () => {
   const isAdmin = user.role === 'admin';
 
   return (
-    <div className={`min-h-screen ${isAdmin ? 'bg-gradient-to-br from-indigo-50 via-violet-100 to-purple-100' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${isAdmin ? 'bg-slate-50' : 'bg-gray-50'}`}>
       <Header />
       <main className="p-4 sm:p-6 md:p-8">
         {isAdmin ? (

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus } from '../types';
 import { 
@@ -30,7 +31,6 @@ const AdminDashboard: React.FC = () => {
 
     // Listener para todos os dados em tempo real
     useEffect(() => {
-        // Listener de Territórios
         const territoriesQuery = query(collection(db, 'territories'));
         const unsubscribeTerritories = onSnapshot(territoriesQuery, (snapshot) => {
             const territoriesList = snapshot.docs.map(doc => {
@@ -55,12 +55,8 @@ const AdminDashboard: React.FC = () => {
             });
             setTerritories(territoriesList);
             if (loading) setLoading(false);
-        }, (error) => {
-            console.error("Erro ao carregar territórios:", error);
-            if (loading) setLoading(false);
         });
 
-        // Listener de Usuários
         const usersQuery = query(collection(db, 'users'));
         const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
             const usersList = snapshot.docs.map(doc => {
@@ -75,7 +71,6 @@ const AdminDashboard: React.FC = () => {
             setUsers(usersList);
         });
         
-        // Listener de Solicitações
         const requestsQuery = query(collection(db, 'requests'), where('status', '==', RequestStatus.PENDING));
         const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
             const reqs = snapshot.docs.map(doc => ({
@@ -126,22 +121,17 @@ const AdminDashboard: React.FC = () => {
         return [...territories].sort((a, b) => {
             if (a.status === TerritoryStatus.IN_USE && b.status !== TerritoryStatus.IN_USE) return 1;
             if (b.status === TerritoryStatus.IN_USE && a.status !== TerritoryStatus.IN_USE) return -1;
-            
             const aRecent = isRecentWork(a.history);
             const bRecent = isRecentWork(b.history);
             const aNeverWorked = (a.history || []).length === 0;
             const bNeverWorked = (b.history || []).length === 0;
-
             if (aNeverWorked && !bNeverWorked) return -1;
             if (bNeverWorked && !aNeverWorked) return 1;
-
             if (!aRecent && bRecent) return -1;
             if (aRecent && !bRecent) return 1;
-
             if (a.history && a.history.length > 0 && b.history && b.history.length > 0) {
                 return b.history[0].completedDate.getTime() - a.history[0].completedDate.getTime();
             }
-
             return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
         });
     }, [territories]);
@@ -160,7 +150,7 @@ const AdminDashboard: React.FC = () => {
     if (loading) return (
         <div className="flex flex-col items-center justify-center p-20 space-y-4">
             <div className="animate-spin h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
-            <p className="text-gray-500 font-bold">Carregando painel...</p>
+            <p className="text-gray-500 font-bold text-center">Carregando painel...</p>
         </div>
     );
 
@@ -171,26 +161,27 @@ const AdminDashboard: React.FC = () => {
             {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
             {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} onClose={() => setViewingMap(null)} />}
 
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            {/* Cabeçalho Limpo - Sem Container */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-1">
                 <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-white rounded-full shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-slate-200 flex-shrink-0">
                         <MapIcon className="w-full h-full"/>
                     </div>
                     <div>
-                        <h1 className="text-4xl font-black text-gray-900 tracking-tight">Painel Admin</h1>
-                        <p className="text-gray-500 font-medium mt-1">Gestão de Congregação</p>
+                        <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-none">Administração</h1>
+                        <p className="text-slate-400 font-bold text-xs mt-1 uppercase tracking-wider">Gestão Territorial</p>
                     </div>
                 </div>
-                <div className="flex bg-white/60 p-1.5 rounded-2xl self-start md:self-auto border-2 border-slate-200">
+                <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-200 self-start md:self-auto">
                     <button 
                         onClick={() => setActiveTab('territories')} 
-                        className={`px-6 py-2 text-sm font-bold rounded-xl transition-all ${activeTab === 'territories' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+                        className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'territories' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                         Mapas
                     </button>
                     <button 
                         onClick={() => setActiveTab('users')} 
-                        className={`px-6 py-2 text-sm font-bold rounded-xl transition-all ${activeTab === 'users' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+                        className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                         Usuários
                     </button>
@@ -199,56 +190,55 @@ const AdminDashboard: React.FC = () => {
 
             {activeTab === 'territories' ? (
                 <>
-                    {/* Estatísticas */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* Estatísticas - Cards Diretos no Fundo */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                         {[
-                            { label: 'Total', value: stats.total, color: 'text-gray-900' },
-                            { label: 'Disponíveis', value: stats.available, color: 'text-emerald-600' },
-                            { label: 'Em Descanso', value: stats.resting, color: 'text-amber-500' },
-                            { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600' }
+                            { label: 'Total', value: stats.total, color: 'text-slate-900', border: 'border-slate-200' },
+                            { label: 'Livres', value: stats.available, color: 'text-emerald-600', border: 'border-emerald-200' },
+                            { label: 'Descanso', value: stats.resting, color: 'text-amber-500', border: 'border-amber-200' },
+                            { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600', border: 'border-blue-200' }
                         ].map(s => (
-                            <div key={s.label} className="bg-white/70 p-6 rounded-3xl border-2 border-slate-200 shadow-2xl shadow-violet-200/60">
-                                <p className="text-xs font-black text-gray-400 uppercase mb-1">{s.label}</p>
-                                <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
+                            <div key={s.label} className={`bg-white p-5 rounded-2xl border-2 ${s.border}`}>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.label}</p>
+                                <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
                             </div>
                         ))}
                     </div>
 
-                    {/* Solicitações Pendentes */}
+                    {/* Solicitações - Sem Container Externo */}
                     {requests.length > 0 && (
-                        <div className="bg-white/50 border-2 border-slate-200 rounded-[2rem] p-8 shadow-2xl shadow-violet-200/40">
-                            <h2 className="text-xl font-black text-blue-900 mb-6 flex items-center gap-2">
-                                <span className="flex h-3 w-3 rounded-full bg-blue-600 animate-pulse"></span>
-                                Solicitações Pendentes ({requests.length})
+                        <div className="space-y-3">
+                            <h2 className="text-[11px] font-black text-blue-900 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                                Solicitações Pendentes
                             </h2>
-                            <div className="space-y-4">
+                            <div className="space-y-2">
                                 {requests.map(req => (
-                                    <div key={req.id} className="bg-white/80 p-6 rounded-2xl shadow-lg shadow-indigo-100/50 flex flex-col md:flex-row items-center justify-between gap-6 border-2 border-slate-200">
+                                    <div key={req.id} className="bg-white p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-2 border-slate-200">
                                         <div>
-                                            <p className="font-black text-gray-900 text-lg">{req.userName}</p>
-                                            <p className="text-sm text-gray-500 font-medium">Solicitado em {formatDate(req.requestDate)}</p>
+                                            <p className="font-black text-slate-900">{req.userName}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">{formatDate(req.requestDate)}</p>
                                         </div>
-                                        
-                                        <div className="flex flex-1 max-w-md items-center gap-3">
+                                        <div className="flex flex-1 max-w-sm items-center gap-2">
                                             {fulfillingRequestId === req.id ? (
-                                                <div className="flex items-center gap-2 w-full">
+                                                <div className="flex items-center gap-2 w-full animate-in slide-in-from-right-1">
                                                     <select 
                                                         value={selectedMapForRequest} 
                                                         onChange={e => setSelectedMapForRequest(e.target.value)}
-                                                        className="flex-1 px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs outline-none"
                                                     >
-                                                        <option value="">Selecione um mapa disponível...</option>
+                                                        <option value="">Escolher...</option>
                                                         {availableMapsOptions.map(m => (
-                                                            <option key={m.id} value={m.id}>{m.name} {isRecentWork(m.history) ? '(Em Descanso)' : ''}</option>
+                                                            <option key={m.id} value={m.id}>{m.name}</option>
                                                         ))}
                                                     </select>
-                                                    <button onClick={() => handleFulfillRequest(req.id)} disabled={!selectedMapForRequest} className="px-6 py-3 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 disabled:bg-gray-200">OK</button>
-                                                    <button onClick={() => setFulfillingRequestId(null)} className="px-4 py-3 bg-gray-100 text-gray-400 font-black rounded-xl">&times;</button>
+                                                    <button onClick={() => handleFulfillRequest(req.id)} disabled={!selectedMapForRequest} className="px-4 py-2 bg-emerald-600 text-white font-black text-[10px] rounded-lg">OK</button>
+                                                    <button onClick={() => setFulfillingRequestId(null)} className="p-2 text-slate-400">&times;</button>
                                                 </div>
                                             ) : (
-                                                <div className="flex gap-3">
-                                                    <button onClick={() => setFulfillingRequestId(req.id)} className="px-8 py-3 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-100">Atribuir Mapa</button>
-                                                    <button onClick={() => handleReject(req.id)} className="px-8 py-3 bg-gray-100 text-gray-500 font-black rounded-xl hover:bg-gray-200">Recusar</button>
+                                                <div className="flex gap-2 w-full sm:w-auto">
+                                                    <button onClick={() => setFulfillingRequestId(req.id)} className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-wider rounded-lg shadow-sm">Atribuir</button>
+                                                    <button onClick={() => handleReject(req.id)} className="px-4 py-2.5 bg-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-wider rounded-lg">Recusar</button>
                                                 </div>
                                             )}
                                         </div>
@@ -258,57 +248,59 @@ const AdminDashboard: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Lista de Mapas */}
-                    <div className="bg-white/70 rounded-3xl border-2 border-slate-200 shadow-2xl shadow-violet-200/60 overflow-hidden">
-                        <div className="p-8 border-b-2 border-slate-200 flex justify-between items-center">
-                            <h2 className="text-2xl font-black text-gray-800">Mapas da Congregação</h2>
-                            <button onClick={() => setShowAddModal(true)} className="px-6 py-3 bg-gray-900 text-white font-black rounded-xl hover:bg-black transition-all transform active:scale-95 shadow-xl shadow-gray-200">
-                                + NOVO MAPA
+                    {/* Lista de Mapas - Cards Diretos no Fundo do Celular */}
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center px-1">
+                            <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">Territórios</h2>
+                            <button onClick={() => setShowAddModal(true)} className="px-4 py-2.5 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-md">
+                                + Novo Mapa
                             </button>
                         </div>
-                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-100/50">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {sortedTerritories.map(m => {
                                 const recent = isRecentWork(m.history);
                                 return (
-                                    <div key={m.id} className="bg-white/80 p-6 rounded-2xl shadow-lg shadow-indigo-100/50 flex flex-col gap-4 border-[5px] border-slate-200">
-                                        <div className="flex justify-between items-start">
+                                    <div key={m.id} className="bg-white p-5 rounded-2xl border-[5px] border-slate-200 shadow-sm">
+                                        <div className="flex justify-between items-start mb-4">
                                             <div>
-                                                <p className="font-black text-gray-900 text-xl">{m.name}</p>
-                                                <button onClick={() => setViewingMap(m)} className="text-xs text-blue-500 font-bold hover:underline">Ver Arquivo &rarr;</button>
+                                                <h3 className="font-black text-slate-900 text-xl tracking-tight">{m.name}</h3>
+                                                <button onClick={() => setViewingMap(m)} className="text-[9px] text-blue-600 font-black uppercase tracking-widest hover:underline mt-0.5">Ver Documento</button>
                                             </div>
                                             {m.status === TerritoryStatus.IN_USE ? (
-                                                <span className="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-black uppercase">Em Uso</span>
+                                                <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-md text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
                                             ) : recent ? (
-                                                <span className="px-4 py-1.5 bg-amber-50 text-amber-600 rounded-full text-xs font-black uppercase">Descanso</span>
+                                                <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-md text-[9px] font-black uppercase tracking-wider border border-amber-100">Descanso</span>
                                             ) : (
-                                                <span className="px-4 py-1.5 bg-emerald-50 text-emerald-600 rounded-full text-xs font-black uppercase">Disponível</span>
+                                                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-md text-[9px] font-black uppercase tracking-wider border border-emerald-100">Livre</span>
                                             )}
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
+                                        
+                                        <div className="grid grid-cols-2 gap-4 py-3 border-y border-slate-50">
                                             <div>
-                                                <p className="text-xs font-bold text-gray-400 uppercase">Responsável</p>
-                                                <p className="font-bold text-gray-700 truncate">{m.assignedToName || '-'}</p>
-                                                {m.dueDate && <p className="text-xs text-red-500 font-bold">Vence em {formatDate(m.dueDate)}</p>}
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Responsável</p>
+                                                <p className="font-bold text-slate-700 text-xs truncate">{m.assignedToName || '-'}</p>
+                                                {m.dueDate && <p className="text-[8px] text-red-500 font-black mt-0.5 uppercase">Expira: {formatDate(m.dueDate)}</p>}
                                             </div>
                                             <div>
-                                                <p className="text-xs font-bold text-gray-400 uppercase">Último Trabalho</p>
-                                                <p className="text-sm font-bold text-gray-600">{m.history && m.history.length > 0 ? formatDate(m.history[0].completedDate) : 'Nunca'}</p>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Último Trabalho</p>
+                                                <p className="text-xs font-bold text-slate-600">{m.history && m.history.length > 0 ? formatDate(m.history[0].completedDate) : 'Nunca'}</p>
                                             </div>
                                         </div>
-                                        <div className="border-t border-slate-200/80 mt-2 pt-4 flex justify-end gap-1">
-                                             <button onClick={() => setEditingTerritory(m)} className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all" title="Editar Mapa">
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg>
+
+                                        <div className="mt-4 flex justify-end gap-1">
+                                             <button onClick={() => setEditingTerritory(m)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg transition-all">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg>
                                             </button>
-                                            <button onClick={() => setViewHistory(m)} className="p-3 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Histórico">
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                            <button onClick={() => setViewHistory(m)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg transition-all">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                             </button>
                                             {m.status === TerritoryStatus.IN_USE && (
-                                                <button onClick={() => handleResetTerritory(m.id)} className="p-3 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all" title="Retomar Mapa">
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg>
+                                                <button onClick={() => handleResetTerritory(m.id)} className="p-2 text-slate-400 hover:text-amber-600 rounded-lg transition-all">
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg>
                                                 </button>
                                             )}
-                                            <button onClick={() => handleDeleteTerritory(m.id)} className="p-3 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Excluir">
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            <button onClick={() => handleDeleteTerritory(m.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-all">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                             </button>
                                         </div>
                                     </div>
@@ -318,25 +310,21 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 </>
             ) : (
-                <div className="bg-white/70 rounded-3xl border-2 border-slate-200 shadow-2xl shadow-violet-200/60 overflow-hidden">
-                    <div className="p-8 border-b-2 border-slate-200">
-                        <h2 className="text-2xl font-black text-gray-800">Usuários Cadastrados</h2>
-                    </div>
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-100/50">
+                <div className="space-y-4">
+                    <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] px-2">Gestão de Usuários</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {users.map(u => (
-                            <div key={u.id} className="bg-white/80 p-6 rounded-2xl shadow-lg flex items-center justify-between gap-4 border-[5px] border-slate-200">
-                                <div className="flex-1">
-                                    <p className="font-black text-gray-900 text-lg truncate">{u.name}</p>
-                                    <p className="font-medium text-gray-500 text-sm truncate">{u.email}</p>
-                                    <span className={`mt-2 inline-block px-3 py-1 rounded-full text-xs font-black uppercase ${u.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-gray-100 text-gray-500'}`}>
+                            <div key={u.id} className="bg-white p-5 rounded-2xl border-[5px] border-slate-200 flex items-center justify-between gap-4">
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="font-black text-slate-900 text-lg leading-tight truncate">{u.name}</p>
+                                    <p className="font-bold text-slate-400 text-[10px] truncate mb-2">{u.email}</p>
+                                    <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider ${u.role === 'admin' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
                                         {u.role}
                                     </span>
                                 </div>
-                                <div className="flex-shrink-0">
-                                    <button onClick={() => handlePromote(u)} className="px-4 py-2 bg-gray-100 text-gray-600 text-xs font-black rounded-lg hover:bg-gray-900 hover:text-white transition-all">
-                                        ALTERAR CARGO
-                                    </button>
-                                </div>
+                                <button onClick={() => handlePromote(u)} className="px-3 py-2.5 bg-slate-50 text-slate-600 text-[9px] font-black rounded-lg border border-slate-200 uppercase tracking-tighter">
+                                    Cargo
+                                </button>
                             </div>
                         ))}
                     </div>
