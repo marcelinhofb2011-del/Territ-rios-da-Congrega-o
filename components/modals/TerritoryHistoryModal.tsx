@@ -14,18 +14,24 @@ const TerritoryHistoryModal: React.FC<{ territory: Territory; onClose: () => voi
                     {territory.history && territory.history.length > 0 ? (
                         <ul className="space-y-4">
                             {territory.history.map((entry, index) => (
-                                <li key={index} className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
-                                    <div className="flex justify-between items-start">
-                                        <p className="font-black text-slate-800 text-lg">{entry.userName}</p>
+                                <li key={index} className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                                    <p className="font-black text-slate-800 text-lg mb-4">{entry.userName}</p>
+                                    
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Início do Trabalho</p>
+                                            <p className="font-bold text-slate-700 text-sm">{formatDate(entry.assignmentDate)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Fim do Trabalho</p>
+                                            <p className="font-bold text-slate-700 text-sm">{formatDate(entry.completedDate)}</p>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-wider bg-white px-3 py-2 rounded-lg border border-slate-100">
-                                        <span>Designado: {formatDate(entry.assignmentDate)}</span>
-                                        <span className="font-sans text-slate-300">&rarr;</span>
-                                        <span>Devolvido: {formatDate(entry.completedDate)}</span>
-                                    </div>
+
                                     {entry.notes && (
-                                        <div className="pt-3 border-t border-slate-100">
-                                            <p className="text-sm text-slate-600 italic leading-relaxed">"{entry.notes}"</p>
+                                        <div className="pt-4 border-t border-slate-200">
+                                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Observações</p>
+                                            <p className="text-sm text-slate-600 leading-relaxed italic">"{entry.notes}"</p>
                                         </div>
                                     )}
                                 </li>

@@ -8,6 +8,7 @@ import { db } from '../firebase/config';
 import MapViewerModal from './modals/MapViewerModal';
 import TerritoryHistoryModal from './modals/TerritoryHistoryModal';
 import ReportModal from './modals/ReportModal';
+import OverdueTerritoryModal from './modals/OverdueTerritoryModal';
 
 const PublisherDashboard: React.FC = () => {
     const { user } = useAuth();
@@ -121,10 +122,19 @@ const PublisherDashboard: React.FC = () => {
         } catch (err) { console.log('Share error'); }
     };
 
+    const isOverdue = myTerritory ? (getDaysRemaining(myTerritory.dueDate) ?? 0) < 0 : false;
+
     if (loading) return <div className="flex justify-center p-20"><div className="animate-spin h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full"></div></div>;
     
     return (
         <div className="max-w-4xl mx-auto space-y-8">
+            {isOverdue && myTerritory && (
+                <OverdueTerritoryModal 
+                    territoryName={myTerritory.name}
+                    onCompleteTerritory={() => setIsReportModalOpen(true)}
+                />
+            )}
+            
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-black text-gray-900 tracking-tight">Meu Trabalho</h1>
             </div>
