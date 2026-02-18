@@ -11,7 +11,7 @@ import MapViewerModal from './modals/MapViewerModal';
 import TerritoryHistoryModal from './modals/TerritoryHistoryModal';
 import AddMapModal from './modals/AddMapModal';
 import EditMapModal from './modals/EditMapModal';
-import { MapIcon } from './Icon';
+import AssignmentsReport from './AssignmentsReport';
 import { useAuth } from '../hooks/useAuth';
 
 const FilterIcon: React.FC = () => (
@@ -26,7 +26,7 @@ const AdminDashboard: React.FC = () => {
     const [requests, setRequests] = useState<TerritoryRequest[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'territories' | 'users'>('territories');
+    const [activeTab, setActiveTab] = useState<'territories' | 'users' | 'assignments'>('territories');
     
     // UI States
     const [showAddModal, setShowAddModal] = useState(false);
@@ -198,6 +198,7 @@ const AdminDashboard: React.FC = () => {
                 <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-200 self-start md:self-auto">
                     <button onClick={() => setActiveTab('territories')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'territories' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Mapas</button>
                     <button onClick={() => setActiveTab('users')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Usuários</button>
+                    <button onClick={() => setActiveTab('assignments')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Designação</button>
                 </div>
             </div>
 
@@ -353,7 +354,7 @@ const AdminDashboard: React.FC = () => {
                         )}
                     </div>
                 </>
-            ) : (
+            ) : activeTab === 'users' ? (
                 <div className="space-y-4">
                     <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] px-2">Gestão de Usuários</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -365,6 +366,8 @@ const AdminDashboard: React.FC = () => {
                         ))}
                     </div>
                 </div>
+            ) : (
+                <AssignmentsReport territories={territories} />
             )}
         </div>
     );

@@ -51,3 +51,39 @@ export const getDeadlineColorInfo = (dueDate: Date | undefined | null): { textCo
   }
   return { textColor: 'text-gray-800', bgColor: 'bg-green-400', label: `Vence em ${daysRemaining} dias` };
 };
+
+export const generateServiceYearOptions = () => {
+    const options: { label: string; value: string; startDate: Date; endDate: Date }[] = [];
+    const today = new Date();
+    const currentMonth = today.getMonth(); // 0-indexed (0=Jan, 8=Sep)
+
+    // O ano de serviço corre de 1 de Setembro a 31 de Agosto.
+    // Se estamos em Setembro ou depois (mês >= 8), o ano de serviço é o próximo ano do calendário.
+    let currentServiceYear = today.getFullYear();
+    if (currentMonth >= 8) {
+        currentServiceYear += 1;
+    }
+
+    // Gerar opções para os últimos 3 anos, o ano atual, e os próximos 2.
+    for (let i = 3; i > 0; i--) {
+        const year = currentServiceYear - i;
+        options.push({
+            label: `Ano de Serviço ${year}`,
+            value: `sy-${year}`,
+            startDate: new Date(year - 1, 8, 1), // 1 de Setembro do ano anterior
+            endDate: new Date(year, 7, 31, 23, 59, 59), // 31 de Agosto do ano de serviço
+        });
+    }
+
+    for (let i = 0; i < 3; i++) { // Current + 2 future years
+        const year = currentServiceYear + i;
+        options.push({
+            label: `Ano de Serviço ${year}`,
+            value: `sy-${year}`,
+            startDate: new Date(year - 1, 8, 1),
+            endDate: new Date(year, 7, 31, 23, 59, 59),
+        });
+    }
+
+    return options.reverse(); // Mostra os anos mais recentes primeiro
+};
