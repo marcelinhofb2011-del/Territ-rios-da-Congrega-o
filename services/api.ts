@@ -188,6 +188,7 @@ export const createTerritory = async (name: string, url: string): Promise<void> 
             createdAt: Timestamp.now(),
             history: [],
             permanentNotes: '',
+            campaignMode: false,
             assignedTo: null,
             assignedToName: null,
             assignmentDate: null,

@@ -41,6 +41,7 @@ export interface Territory {
   dueDate: Date | null;
   history: TerritoryHistory[];
   permanentNotes?: string;
+  campaignMode?: boolean;
 }
 
 export interface TerritoryRequest {

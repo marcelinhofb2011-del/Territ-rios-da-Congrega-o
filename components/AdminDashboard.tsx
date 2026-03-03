@@ -117,14 +117,35 @@ const AdminDashboard: React.FC = () => {
         if (confirm("Deseja retomar este território? Ele voltará a ficar disponível e a ação será registrada no histórico.")) await adminResetTerritory(id, user);
     };
     const handlePromote = async (user: User) => { await updateUserRole(user.id, user.role === 'admin' ? 'user' : 'admin'); };
+    const handleToggleCampaignMode = async (id: string, current: boolean) => {
+        try {
+            await updateTerritory(id, { campaignMode: !current });
+        } catch (e: any) { alert(e.message); }
+    };
+    const handleBulkCampaignMode = async (enable: boolean) => {
+        const action = enable ? 'ativar' : 'desativar';
+        if (confirm(`Deseja ${action} o modo campanha para os territórios? Isso tornará os mapas em descanso disponíveis imediatamente.`)) {
+            try {
+                // Se for para ativar, pegamos os que estão em descanso. 
+                // Se for para desativar, pegamos os que estão com campaignMode true.
+                const targets = enable 
+                    ? territories.filter(t => t.status === TerritoryStatus.AVAILABLE && isRecentWork(t.history, false))
+                    : territories.filter(t => t.campaignMode === true);
+                
+                for (const t of targets) {
+                    await updateTerritory(t.id, { campaignMode: enable });
+                }
+            } catch (e: any) { alert(e.message); }
+        }
+    };
 
     // Memoized data processing
     const availableMapsOptions = useMemo(() => {
         return territories
             .filter(t => t.status === TerritoryStatus.AVAILABLE)
             .sort((a, b) => {
-                const aRecent = isRecentWork(a.history);
-                const bRecent = isRecentWork(b.history);
+                const aRecent = isRecentWork(a.history, a.campaignMode);
+                const bRecent = isRecentWork(b.history, b.campaignMode);
                 if (!aRecent && bRecent) return -1;
                 if (aRecent && !bRecent) return 1;
                 return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
@@ -136,8 +157,8 @@ const AdminDashboard: React.FC = () => {
         if (filterStatus !== 'all') {
             processed = processed.filter(t => {
                 switch (filterStatus) {
-                    case 'available': return t.status === TerritoryStatus.AVAILABLE && !isRecentWork(t.history);
-                    case 'resting': return t.status === TerritoryStatus.AVAILABLE && isRecentWork(t.history);
+                    case 'available': return t.status === TerritoryStatus.AVAILABLE && !isRecentWork(t.history, t.campaignMode);
+                    case 'resting': return t.status === TerritoryStatus.AVAILABLE && isRecentWork(t.history, t.campaignMode);
                     case 'in_use': return t.status === TerritoryStatus.IN_USE;
                     default: return true;
                 }
@@ -161,8 +182,8 @@ const AdminDashboard: React.FC = () => {
                 default:
                     if (a.status === TerritoryStatus.IN_USE && b.status !== TerritoryStatus.IN_USE) return 1;
                     if (b.status === TerritoryStatus.IN_USE && a.status !== TerritoryStatus.IN_USE) return -1;
-                    if (!isRecentWork(a.history) && isRecentWork(b.history)) return -1;
-                    if (isRecentWork(a.history) && !isRecentWork(b.history)) return 1;
+                    if (!isRecentWork(a.history, a.campaignMode) && isRecentWork(b.history, b.campaignMode)) return -1;
+                    if (isRecentWork(a.history, a.campaignMode) && !isRecentWork(b.history, b.campaignMode)) return 1;
                     const aDate = a.history?.[0]?.completedDate?.getTime() || 0;
                     const bDate = b.history?.[0]?.completedDate?.getTime() || 0;
                     return bDate - aDate;
@@ -173,8 +194,8 @@ const AdminDashboard: React.FC = () => {
 
     const stats = useMemo(() => ({
         total: territories.length,
-        available: territories.filter(t => t.status === TerritoryStatus.AVAILABLE && !isRecentWork(t.history)).length,
-        resting: territories.filter(t => t.status === TerritoryStatus.AVAILABLE && isRecentWork(t.history)).length,
+        available: territories.filter(t => t.status === TerritoryStatus.AVAILABLE && !isRecentWork(t.history, t.campaignMode)).length,
+        resting: territories.filter(t => t.status === TerritoryStatus.AVAILABLE && isRecentWork(t.history, t.campaignMode)).length,
         inUse: territories.filter(t => t.status === TerritoryStatus.IN_USE).length,
     }), [territories]);
 
@@ -222,7 +243,7 @@ const AdminDashboard: React.FC = () => {
                                                 <div className="flex items-center gap-2 w-full animate-in slide-in-from-right-1">
                                                     <select value={selectedMapForRequest} onChange={e => setSelectedMapForRequest(e.target.value)} className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs outline-none">
                                                         <option value="">Escolher...</option>
-                                                        {availableMapsOptions.map(m => (<option key={m.id} value={m.id}>{m.name} {isRecentWork(m.history) ? '(Descanso)' : ''}</option>))}
+                                                        {availableMapsOptions.map(m => (<option key={m.id} value={m.id}>{m.name} {isRecentWork(m.history, m.campaignMode) ? '(Descanso)' : ''}</option>))}
                                                     </select>
                                                     <button onClick={() => handleFulfillRequest(req.id)} disabled={!selectedMapForRequest} className="px-4 py-2 bg-emerald-600 text-white font-black text-[10px] rounded-lg">OK</button>
                                                     <button onClick={() => setFulfillingRequestId(null)} className="p-2 text-slate-400">&times;</button>
@@ -241,40 +262,60 @@ const AdminDashboard: React.FC = () => {
                     )}
 
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center px-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
                             <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">Territórios</h2>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
                                 <div className="relative" ref={filterMenuRef}>
                                     <button onClick={() => setShowFilterMenu(!showFilterMenu)} className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-600 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50">
                                         <FilterIcon />
                                         Filtrar e Ordenar
                                     </button>
                                     {showFilterMenu && (
-                                        <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-lg border border-slate-100 z-10 p-2 animate-in fade-in zoom-in-95">
-                                            <div className="space-y-2">
-                                                <div>
-                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider px-3 pb-1">Filtrar por Status</p>
-                                                    <div className="flex flex-col">
-                                                        <button onClick={() => { setFilterStatus('all'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'all' ? 'bg-blue-50 text-blue-700' : ''}`}>Todos</button>
-                                                        <button onClick={() => { setFilterStatus('available'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'available' ? 'bg-blue-50 text-blue-700' : ''}`}>Livres</button>
-                                                        <button onClick={() => { setFilterStatus('resting'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'resting' ? 'bg-blue-50 text-blue-700' : ''}`}>Em Descanso</button>
-                                                        <button onClick={() => { setFilterStatus('in_use'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'in_use' ? 'bg-blue-50 text-blue-700' : ''}`}>Em Uso</button>
-                                                    </div>
+                                        <>
+                                            {/* Backdrop for mobile to handle clicks and focus */}
+                                            <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 sm:hidden" onClick={() => setShowFilterMenu(false)}></div>
+                                            
+                                            <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:translate-y-0 mt-2 w-auto sm:w-64 bg-white rounded-3xl sm:rounded-2xl shadow-2xl border border-slate-100 z-50 p-4 sm:p-2 animate-in fade-in zoom-in-95 slide-in-from-bottom-8 sm:slide-in-from-top-2 origin-center sm:origin-top-right">
+                                                <div className="flex items-center justify-between mb-4 sm:hidden">
+                                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtros e Ordenação</h3>
+                                                    <button onClick={() => setShowFilterMenu(false)} className="p-2 text-slate-400 hover:text-slate-600">&times;</button>
                                                 </div>
-                                                <div className="h-px bg-slate-100 mx-2"></div>
-                                                <div>
-                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider px-3 pb-1">Ordenar por</p>
-                                                    <div className="flex flex-col">
-                                                        <button onClick={() => { setSortBy('default'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'default' ? 'bg-blue-50 text-blue-700' : ''}`}>Padrão</button>
-                                                        <button onClick={() => { setSortBy('name'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'name' ? 'bg-blue-50 text-blue-700' : ''}`}>Nome (A-Z)</button>
-                                                        <button onClick={() => { setSortBy('oldest'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'oldest' ? 'bg-blue-50 text-blue-700' : ''}`}>Mais Antigos</button>
-                                                        <button onClick={() => { setSortBy('newest'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'newest' ? 'bg-blue-50 text-blue-700' : ''}`}>Mais Recentes</button>
+                                                <div className="space-y-4 sm:space-y-2">
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider px-3 pb-1">Filtrar por Status</p>
+                                                        <div className="flex flex-col gap-1 sm:gap-0">
+                                                            <button onClick={() => { setFilterStatus('all'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'all' ? 'bg-blue-50 text-blue-700' : ''}`}>Todos</button>
+                                                            <button onClick={() => { setFilterStatus('available'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'available' ? 'bg-blue-50 text-blue-700' : ''}`}>Livres</button>
+                                                            <button onClick={() => { setFilterStatus('resting'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'resting' ? 'bg-blue-50 text-blue-700' : ''}`}>Em Descanso</button>
+                                                            <button onClick={() => { setFilterStatus('in_use'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'in_use' ? 'bg-blue-50 text-blue-700' : ''}`}>Em Uso</button>
+                                                        </div>
                                                     </div>
+                                                    <div className="h-px bg-slate-100 mx-2"></div>
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider px-3 pb-1">Ordenar por</p>
+                                                        <div className="flex flex-col gap-1 sm:gap-0">
+                                                            <button onClick={() => { setSortBy('default'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'default' ? 'bg-blue-50 text-blue-700' : ''}`}>Padrão</button>
+                                                            <button onClick={() => { setSortBy('name'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'name' ? 'bg-blue-50 text-blue-700' : ''}`}>Nome (A-Z)</button>
+                                                            <button onClick={() => { setSortBy('oldest'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'oldest' ? 'bg-blue-50 text-blue-700' : ''}`}>Mais Antigos</button>
+                                                            <button onClick={() => { setSortBy('newest'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'newest' ? 'bg-blue-50 text-blue-700' : ''}`}>Mais Recentes</button>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => setShowFilterMenu(false)} className="w-full mt-2 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-xl sm:hidden">Fechar</button>
                                                 </div>
                                             </div>
-                                        </div>
+                                        </>
                                     )}
                                 </div>
+                                {stats.resting > 0 && (
+                                    <button onClick={() => handleBulkCampaignMode(true)} className="px-4 py-2.5 bg-emerald-100 text-emerald-700 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm border border-emerald-200 hover:bg-emerald-200 transition-colors">
+                                        Liberar Campanha ({stats.resting})
+                                    </button>
+                                )}
+                                {territories.some(t => t.campaignMode) && (
+                                    <button onClick={() => handleBulkCampaignMode(false)} className="px-4 py-2.5 bg-slate-100 text-slate-600 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm border border-slate-200 hover:bg-slate-200 transition-colors">
+                                        Encerrar Campanha
+                                    </button>
+                                )}
                                 <button onClick={() => setShowAddModal(true)} className="px-4 py-2.5 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-md">+ Novo Mapa</button>
                             </div>
                         </div>
@@ -282,7 +323,7 @@ const AdminDashboard: React.FC = () => {
                         {displayTerritories.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {displayTerritories.map(m => {
-                                    const recent = isRecentWork(m.history);
+                                    const recent = isRecentWork(m.history, m.campaignMode);
                                     const isOverdue = m.status === TerritoryStatus.IN_USE && (getDaysRemaining(m.dueDate) ?? 0) < 0;
 
                                     let borderColor = 'border-slate-200';
@@ -339,6 +380,16 @@ const AdminDashboard: React.FC = () => {
                                             <div className="mt-4 flex justify-end gap-1">
                                                 <button onClick={() => setEditingTerritory(m)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg></button>
                                                 <button onClick={() => setViewHistory(m)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></button>
+                                                {m.status === TerritoryStatus.AVAILABLE && isRecentWork(m.history, false) && !m.campaignMode && (
+                                                    <button onClick={() => handleToggleCampaignMode(m.id, false)} title="Disponibilizar para Campanha" className="p-2 text-slate-400 hover:text-emerald-600 rounded-lg transition-all">
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                                    </button>
+                                                )}
+                                                {m.campaignMode && (
+                                                    <button onClick={() => handleToggleCampaignMode(m.id, true)} title="Remover Modo Campanha" className="p-2 text-emerald-600 hover:text-slate-400 rounded-lg transition-all">
+                                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                                    </button>
+                                                )}
                                                 {m.status === TerritoryStatus.IN_USE && (<button onClick={() => handleResetTerritory(m.id)} className="p-2 text-slate-400 hover:text-amber-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg></button>)}
                                                 <button onClick={() => handleDeleteTerritory(m.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                                             </div>

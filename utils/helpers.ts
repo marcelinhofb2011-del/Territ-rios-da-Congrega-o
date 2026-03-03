@@ -19,9 +19,10 @@ export const getDaysRemaining = (dueDate: Date | undefined | null): number | nul
 };
 
 /**
- * Retorna true se o território foi trabalhado nos últimos 60 dias.
+ * Retorna true se o território foi trabalhado nos últimos 60 dias e NÃO está em modo campanha.
  */
-export const isRecentWork = (history: any[] | undefined): boolean => {
+export const isRecentWork = (history: any[] | undefined, campaignMode?: boolean): boolean => {
+    if (campaignMode) return false;
     if (!history || history.length === 0) return false;
     
     // O histórico já vem ordenado pela API (mais recente primeiro)
