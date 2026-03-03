@@ -96,7 +96,7 @@ const PublisherDashboard: React.FC = () => {
     const handleSubmitReport = async (notes: string) => {
         if (!user || !myTerritory) return;
         try {
-            await submitReport(user, myTerritory, notes);
+            await submitReport(user, myTerritory.id, notes);
             setIsReportModalOpen(false);
         } catch (err: any) {
             console.error("Erro ao devolver:", err);

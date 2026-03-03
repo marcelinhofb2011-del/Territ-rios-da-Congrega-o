@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Territory } from '../types';
+import { Territory, TerritoryStatus } from '../types';
 import { formatDate, generateServiceYearOptions } from '../utils/helpers';
 
 interface ReportEntry {
   territoryName: string;
   userName: string;
   assignmentDate: Date;
-  completedDate: Date;
+  completedDate: Date | null;
   id: string;
+  status: TerritoryStatus;
 }
 
 const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories }) => {
@@ -16,26 +17,49 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
   const [filteredData, setFilteredData] = useState<ReportEntry[]>([]);
 
   const filterOptions = [
+    { label: 'Hoje', value: 'today' },
     { label: 'Últimos 6 meses', value: 'last-6-months' },
     { label: 'Últimos 12 meses', value: 'last-12-months' },
     ...serviceYearOptions,
   ];
 
   useEffect(() => {
-    const allHistoryEntries: ReportEntry[] = territories.flatMap(t =>
-      (t.history || []).map((h, index) => ({
-        territoryName: t.name,
-        userName: h.userName,
-        assignmentDate: h.assignmentDate,
-        completedDate: h.completedDate,
-        id: `${t.id}-${index}`
-      }))
-    );
+    const allEntries: ReportEntry[] = [];
+
+    territories.forEach(t => {
+      // Add history entries
+      (t.history || []).forEach((h, index) => {
+        allEntries.push({
+          territoryName: t.name,
+          userName: h.userName,
+          assignmentDate: h.assignmentDate,
+          completedDate: h.completedDate,
+          id: `${t.id}-h-${index}`,
+          status: TerritoryStatus.AVAILABLE // It was completed, so it's available now in history context
+        });
+      });
+
+      // Add current assignment if in use
+      if (t.status === TerritoryStatus.IN_USE && t.assignedToName && t.assignmentDate) {
+        allEntries.push({
+          territoryName: t.name,
+          userName: t.assignedToName,
+          assignmentDate: t.assignmentDate,
+          completedDate: null,
+          id: `${t.id}-current`,
+          status: TerritoryStatus.IN_USE
+        });
+      }
+    });
 
     let startDate: Date | null = null;
     let endDate: Date = new Date();
+    endDate.setHours(23, 59, 59, 999);
 
-    if (filterPeriod === 'last-6-months') {
+    if (filterPeriod === 'today') {
+        startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+    } else if (filterPeriod === 'last-6-months') {
         startDate = new Date();
         startDate.setMonth(startDate.getMonth() - 6);
     } else if (filterPeriod === 'last-12-months') {
@@ -50,11 +74,14 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
     }
 
     if (startDate) {
-        const data = allHistoryEntries.filter(entry => {
-            const completed = entry.completedDate;
-            return completed >= startDate! && completed <= endDate;
+        const data = allEntries.filter(entry => {
+            // For active assignments, we use assignmentDate for filtering
+            // For completed ones, we use completedDate
+            const dateToFilter = entry.completedDate || entry.assignmentDate;
+            return dateToFilter >= startDate! && dateToFilter <= endDate;
         });
-        data.sort((a, b) => b.completedDate.getTime() - a.completedDate.getTime());
+        // Sort by assignment date descending (most recent first)
+        data.sort((a, b) => b.assignmentDate.getTime() - a.assignmentDate.getTime());
         setFilteredData(data);
     }
   }, [territories, filterPeriod, serviceYearOptions]);
@@ -62,7 +89,7 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
   const handleExportCsv = async () => {
     const headers = "Publicador,Território,Data de Designação,Data de Devolução\n";
     const csvContent = filteredData.map(row => 
-        `"${row.userName}","${row.territoryName}","${formatDate(row.assignmentDate)}","${formatDate(row.completedDate)}"`
+        `"${row.userName}","${row.territoryName}","${formatDate(row.assignmentDate)}","${row.completedDate ? formatDate(row.completedDate) : 'Em andamento'}"`
     ).join("\n");
 
     const fullCsv = headers + csvContent;
@@ -98,7 +125,7 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
               <td>${row.userName}</td>
               <td>${row.territoryName}</td>
               <td>${formatDate(row.assignmentDate)}</td>
-              <td>${formatDate(row.completedDate)}</td>
+              <td>${row.completedDate ? formatDate(row.completedDate) : '<span style="color: #2563eb; font-weight: bold;">Em andamento</span>'}</td>
           </tr>
       `).join('');
 
@@ -144,6 +171,11 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
 
   return (
     <div className="space-y-6">
+        <div className="flex justify-between items-center px-1">
+            <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">Relatório de Designações</h2>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredData.length} registros encontrados</p>
+        </div>
+
         <div className="bg-white p-5 rounded-2xl border-2 border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex-1">
                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Filtrar por Período</label>
@@ -152,6 +184,7 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
                     onChange={e => setFilterPeriod(e.target.value)}
                     className="w-full md:w-auto px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none shadow-sm"
                 >
+                    <option value="today">Hoje</option>
                     <option value="last-6-months">Últimos 6 meses</option>
                     <option value="last-12-months">Últimos 12 meses</option>
                     <optgroup label="Ano de Serviço">
@@ -188,7 +221,11 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
                                 <td className="px-5 py-4 font-bold text-slate-800 whitespace-nowrap">{entry.userName}</td>
                                 <td className="px-5 py-4 font-bold text-slate-600 whitespace-nowrap">{entry.territoryName}</td>
                                 <td className="px-5 py-4 font-bold text-slate-500 whitespace-nowrap">{formatDate(entry.assignmentDate)}</td>
-                                <td className="px-5 py-4 font-bold text-slate-500 whitespace-nowrap">{formatDate(entry.completedDate)}</td>
+                                <td className="px-5 py-4 font-bold text-slate-500 whitespace-nowrap">
+                                    {entry.completedDate ? formatDate(entry.completedDate) : (
+                                        <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-[10px] uppercase tracking-wider">Em andamento</span>
+                                    )}
+                                </td>
                             </tr>
                         )) : (
                             <tr>

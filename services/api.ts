@@ -383,30 +383,33 @@ export const rejectRequest = async (requestId: string): Promise<void> => {
     await updateDoc(doc(db, 'requests', requestId), { status: RequestStatus.REJECTED });
 };
 
-export const submitReport = async (user: User, territory: Territory, notes: string): Promise<void> => {
-    const territoryRef = doc(db, 'territories', territory.id);
+export const submitReport = async (user: User, territoryId: string, notes: string): Promise<void> => {
+    const territoryRef = doc(db, 'territories', territoryId);
     
-    const historyEntry = {
-        userId: user.id,
-        userName: user.name,
-        assignmentDate: territory.assignmentDate ? Timestamp.fromDate(territory.assignmentDate) : Timestamp.now(),
-        completedDate: Timestamp.now(),
-        notes: notes.trim()
-    };
-    
-    const currentHistory = territory.history.map(h => ({
-        ...h,
-        assignmentDate: Timestamp.fromDate(h.assignmentDate),
-        completedDate: Timestamp.fromDate(h.completedDate)
-    }));
+    await runTransaction(db, async (transaction) => {
+        const territoryDoc = await transaction.get(territoryRef);
+        if (!territoryDoc.exists()) throw new Error("Território não encontrado.");
+        
+        const territoryData = territoryDoc.data();
+        
+        const historyEntry = {
+            userId: user.id,
+            userName: user.name,
+            assignmentDate: territoryData.assignmentDate || Timestamp.now(),
+            completedDate: Timestamp.now(),
+            notes: notes.trim()
+        };
+        
+        const currentHistory = territoryData.history || [];
 
-    await updateDoc(territoryRef, {
-        status: TerritoryStatus.AVAILABLE,
-        assignedTo: null,
-        assignedToName: null,
-        assignmentDate: null,
-        dueDate: null,
-        history: [...currentHistory, historyEntry]
+        transaction.update(territoryRef, {
+            status: TerritoryStatus.AVAILABLE,
+            assignedTo: null,
+            assignedToName: null,
+            assignmentDate: null,
+            dueDate: null,
+            history: [...currentHistory, historyEntry]
+        });
     });
 };
 
