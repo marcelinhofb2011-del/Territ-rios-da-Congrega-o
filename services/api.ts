@@ -376,6 +376,15 @@ export const assignTerritoryToRequest = async (requestId: string, territoryId: s
             read: false,
             createdAt: Timestamp.now()
         });
+
+        // Trigger push notification after transaction
+        setTimeout(() => {
+            sendPushNotification(
+                reqData.userId, 
+                "Território Atribuído! 🗺️", 
+                `O mapa ${territoryDoc.data().name} foi designado para você.`
+            );
+        }, 1000);
     });
 };
 
@@ -414,6 +423,28 @@ export const submitReport = async (user: User, territoryId: string, notes: strin
 };
 
 // --- NOTIFICATIONS ---
+
+export const sendPushNotification = async (userId: string, title: string, body: string) => {
+    try {
+        const userDoc = await getDoc(doc(db, 'users', userId));
+        if (!userDoc.exists()) return;
+        
+        const tokens = userDoc.data().fcmTokens || [];
+        if (tokens.length === 0) return;
+
+        await fetch('/api/send-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tokens,
+                title,
+                body
+            })
+        });
+    } catch (error) {
+        console.error("Erro ao enviar push notification:", error);
+    }
+};
 
 export const fetchNotifications = async (user: User): Promise<AppNotification[]> => {
     const q = query(collection(db, 'notifications'), where('userId', '==', user.id));

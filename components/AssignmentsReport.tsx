@@ -14,6 +14,8 @@ interface ReportEntry {
 const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories }) => {
   const serviceYearOptions = useMemo(() => generateServiceYearOptions(), []);
   const [filterPeriod, setFilterPeriod] = useState<string>('last-6-months');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'in-progress' | 'completed'>('all');
   const [filteredData, setFilteredData] = useState<ReportEntry[]>([]);
 
   const filterOptions = [
@@ -74,17 +76,26 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
     }
 
     if (startDate) {
-        const data = allEntries.filter(entry => {
+        let data = allEntries.filter(entry => {
             // For active assignments, we use assignmentDate for filtering
             // For completed ones, we use completedDate
             const dateToFilter = entry.completedDate || entry.assignmentDate;
-            return dateToFilter >= startDate! && dateToFilter <= endDate;
+            const matchesPeriod = dateToFilter >= startDate! && dateToFilter <= endDate;
+            
+            const matchesSearch = entry.territoryName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                 entry.userName.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            const matchesStatus = statusFilter === 'all' || 
+                                 (statusFilter === 'in-progress' && !entry.completedDate) ||
+                                 (statusFilter === 'completed' && entry.completedDate);
+
+            return matchesPeriod && matchesSearch && matchesStatus;
         });
         // Sort by assignment date descending (most recent first)
         data.sort((a, b) => b.assignmentDate.getTime() - a.assignmentDate.getTime());
         setFilteredData(data);
     }
-  }, [territories, filterPeriod, serviceYearOptions]);
+  }, [territories, filterPeriod, serviceYearOptions, searchTerm, statusFilter]);
 
   const handleExportCsv = async () => {
     const headers = "Publicador,Território,Data de Designação,Data de Devolução\n";
@@ -130,25 +141,33 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
       `).join('');
 
       const printWindow = window.open('', '_blank');
-      printWindow?.document.write(`
+      if (!printWindow) {
+          alert('Por favor, permita popups para gerar o PDF.');
+          return;
+      }
+
+      printWindow.document.write(`
           <html>
               <head>
                   <title>Relatório de Designações</title>
                   <style>
-                      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; }
-                      table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                      th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-                      th { background-color: #f2f2f2; font-weight: bold; }
-                      h1, h2 { color: #333; }
+                      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #334155; }
+                      table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+                      th, td { border: 1px solid #e2e8f0; padding: 12px; text-align: left; font-size: 12px; }
+                      th { background-color: #f8fafc; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+                      h1 { color: #0f172a; margin-bottom: 5px; font-size: 24px; }
+                      h2 { color: #64748b; font-size: 14px; margin-top: 0; font-weight: normal; }
+                      .status-tag { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+                      .status-progress { color: #2563eb; background: #eff6ff; }
                       @media print {
-                          body { -webkit-print-color-adjust: exact; }
-                          button { display: none; }
+                          body { padding: 0; }
+                          @page { margin: 2cm; }
                       }
                   </style>
               </head>
               <body>
                   <h1>Relatório de Designações</h1>
-                  <h2>Período: ${periodLabel}</h2>
+                  <h2>Período: ${periodLabel} | Gerado em: ${new Date().toLocaleDateString('pt-BR')}</h2>
                   <table>
                       <thead>
                           <tr>
@@ -162,11 +181,19 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
                           ${tableContent}
                       </tbody>
                   </table>
-                  <script>setTimeout(() => { window.print(); window.close(); }, 500);</script>
+                  <script>
+                      window.onload = function() {
+                          setTimeout(() => {
+                              window.print();
+                              // Não fechar automaticamente para evitar o erro relatado pelo usuário
+                              // window.close(); 
+                          }, 500);
+                      };
+                  </script>
               </body>
           </html>
       `);
-      printWindow?.document.close();
+      printWindow.document.close();
   };
 
   return (
@@ -176,28 +203,53 @@ const AssignmentsReport: React.FC<{ territories: Territory[] }> = ({ territories
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredData.length} registros encontrados</p>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border-2 border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex-1">
-                 <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Filtrar por Período</label>
-                 <select 
-                    value={filterPeriod} 
-                    onChange={e => setFilterPeriod(e.target.value)}
-                    className="w-full md:w-auto px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none shadow-sm"
-                >
-                    <option value="today">Hoje</option>
-                    <option value="last-6-months">Últimos 6 meses</option>
-                    <option value="last-12-months">Últimos 12 meses</option>
-                    <optgroup label="Ano de Serviço">
-                        {serviceYearOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                    </optgroup>
-                 </select>
+        <div className="bg-white p-5 rounded-2xl border-2 border-slate-200 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex-1">
+                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Buscar por Nome/Número</label>
+                     <input 
+                        type="text"
+                        placeholder="Ex: 01 ou João..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none shadow-sm focus:ring-2 focus:ring-blue-500/20 transition-all"
+                     />
+                </div>
+                <div>
+                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</label>
+                     <select 
+                        value={statusFilter} 
+                        onChange={e => setStatusFilter(e.target.value as any)}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none shadow-sm"
+                    >
+                        <option value="all">Todos os Status</option>
+                        <option value="in-progress">Em Andamento</option>
+                        <option value="completed">Concluídos</option>
+                     </select>
+                </div>
+                <div>
+                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Período / Ano</label>
+                     <select 
+                        value={filterPeriod} 
+                        onChange={e => setFilterPeriod(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm outline-none shadow-sm"
+                    >
+                        <option value="today">Hoje</option>
+                        <option value="last-6-months">Últimos 6 meses</option>
+                        <option value="last-12-months">Últimos 12 meses</option>
+                        <optgroup label="Ano de Serviço">
+                            {serviceYearOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        </optgroup>
+                     </select>
+                </div>
             </div>
-            <div className="flex items-center gap-2">
-                <button onClick={handleExportCsv} className="flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white font-black text-[10px] uppercase tracking-wider rounded-lg shadow-sm hover:bg-emerald-700 transition-colors">
+            
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button onClick={handleExportCsv} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white font-black text-[10px] uppercase tracking-wider rounded-lg shadow-sm hover:bg-emerald-700 transition-colors">
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zM7 6a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm3 10a1 1 0 01-1-1v-4a1 1 0 112 0v4a1 1 0 01-1 1z" /></svg>
                     EXCEL
                 </button>
-                <button onClick={handleExportPdf} className="flex items-center gap-2 px-4 py-3 bg-red-600 text-white font-black text-[10px] uppercase tracking-wider rounded-lg shadow-sm hover:bg-red-700 transition-colors">
+                <button onClick={handleExportPdf} className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white font-black text-[10px] uppercase tracking-wider rounded-lg shadow-sm hover:bg-red-700 transition-colors">
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm4 10.5a.5.5 0 00.5.5h3a.5.5 0 000-1h-3a.5.5 0 00-.5.5zM8 11.5a.5.5 0 00.5.5h3a.5.5 0 000-1h-3a.5.5 0 00-.5.5zM8 9.5a.5.5 0 00.5.5h3a.5.5 0 000-1h-3a.5.5 0 00-.5.5z" clipRule="evenodd" /></svg>
                     PDF
                 </button>

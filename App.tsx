@@ -5,9 +5,11 @@ import LoginPage from './components/LoginPage';
 import AdminDashboard from './components/AdminDashboard';
 import PublisherDashboard from './components/PublisherDashboard';
 import Header from './components/Header';
+import { usePushNotifications } from './hooks/usePushNotifications';
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
+  usePushNotifications(user);
 
   if (loading) {
     return (
