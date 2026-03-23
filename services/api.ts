@@ -662,7 +662,7 @@ export const requestTerritory = async (user: User): Promise<void> => {
     });
 };
 
-export const assignTerritoryToRequest = async (requestId: string, territoryIds: string[]): Promise<void> => {
+export const assignTerritoryToRequest = async (requestId: string, territoryIds: string[], customDueDate?: Date): Promise<void> => {
     try {
         // Deduplicate IDs to prevent redundant reads/writes
         const uniqueIds = Array.from(new Set(territoryIds));
@@ -688,8 +688,10 @@ export const assignTerritoryToRequest = async (requestId: string, territoryIds: 
             if (territoryDocs.length === 0) throw new Error("Nenhum território válido selecionado.");
 
             // 2. ALL WRITES MUST BE AFTER ALL READS
-            const dueDate = new Date();
-            dueDate.setDate(dueDate.getDate() + 30); 
+            const dueDate = customDueDate || new Date();
+            if (!customDueDate) {
+                dueDate.setDate(dueDate.getDate() + 30); 
+            }
             const territoryNames: string[] = [];
             const now = Timestamp.now();
 

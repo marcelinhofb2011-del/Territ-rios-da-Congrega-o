@@ -41,6 +41,11 @@ const AdminDashboard: React.FC = () => {
     const [viewHistory, setViewHistory] = useState<Territory | null>(null);
     const [viewingMap, setViewingMap] = useState<Territory | null>(null);
     const [fulfillingRequestId, setFulfillingRequestId] = useState<string | null>(null);
+    const [requestDueDate, setRequestDueDate] = useState<string>(() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 30);
+        return d.toISOString().split('T')[0];
+    });
     const [selectedMapsForRequest, setSelectedMapsForRequest] = useState<string[]>([]);
     const [showManualAssignModal, setShowManualAssignModal] = useState(false);
     const [editingAssignment, setEditingAssignment] = useState<Territory | null>(null);
@@ -181,7 +186,11 @@ const AdminDashboard: React.FC = () => {
     const handleFulfillRequest = async (requestId: string) => {
         if (selectedMapsForRequest.length === 0) return;
         try {
-            await assignTerritoryToRequest(requestId, selectedMapsForRequest);
+            await assignTerritoryToRequest(
+                requestId, 
+                selectedMapsForRequest, 
+                new Date(requestDueDate + 'T12:00:00')
+            );
             setFulfillingRequestId(null); 
             setSelectedMapsForRequest([]);
         } catch (e: any) { 
@@ -534,6 +543,15 @@ const AdminDashboard: React.FC = () => {
                                                             </div>
                                                         )}
                                                     </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">Data de Devolução</label>
+                                                        <input 
+                                                            type="date" 
+                                                            value={requestDueDate}
+                                                            onChange={(e) => setRequestDueDate(e.target.value)}
+                                                            className="w-full p-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold focus:outline-none focus:border-blue-500"
+                                                        />
+                                                    </div>
                                                     <div className="flex items-center gap-2">
                                                         <button 
                                                             onClick={() => handleFulfillRequest(req.id)} 
@@ -657,7 +675,7 @@ const AdminDashboard: React.FC = () => {
                                                             <p className="text-xs font-black uppercase tracking-widest truncate">{m.locality}</p>
                                                         </div>
                                                     )}
-                                                    <button onClick={() => setViewingMap(m)} className="text-[10px] text-slate-400 font-black uppercase tracking-widest hover:text-blue-600 transition-colors mt-3 flex items-center gap-1">
+                                                    <button onClick={() => window.open(m.pdfUrl, '_blank')} className="text-[10px] text-slate-400 font-black uppercase tracking-widest hover:text-blue-600 transition-colors mt-3 flex items-center gap-1">
                                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                                                         Ver Documento
                                                     </button>
