@@ -15,7 +15,6 @@ import EditMapModal from './modals/EditMapModal';
 import ConfirmModal from './modals/ConfirmModal';
 import ManualAssignmentModal from './modals/ManualAssignmentModal';
 import EditAssignmentDatesModal from './modals/EditAssignmentDatesModal';
-import AssignmentsReport from './AssignmentsReport';
 import { useAuth } from '../hooks/useAuth';
 import { 
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, 
@@ -34,7 +33,7 @@ const AdminDashboard: React.FC = () => {
     const [requests, setRequests] = useState<TerritoryRequest[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'territories' | 'users' | 'reports' | 'assignments' | 'stats'>('territories');
+    const [activeTab, setActiveTab] = useState<'territories' | 'worked' | 'users' | 'stats'>('territories');
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingTerritory, setEditingTerritory] = useState<Territory | null>(null);
@@ -187,10 +186,12 @@ const AdminDashboard: React.FC = () => {
     const handleFulfillRequest = async (requestId: string) => {
         if (selectedMapsForRequest.length === 0) return;
         try {
+            // Use the selected requestDueDate
+            const dueDate = new Date(requestDueDate + 'T12:00:00');
             await assignTerritoryToRequest(
                 requestId, 
                 selectedMapsForRequest, 
-                new Date(requestDueDate + 'T12:00:00')
+                dueDate
             );
             setFulfillingRequestId(null); 
             setSelectedMapsForRequest([]);
@@ -258,12 +259,128 @@ const AdminDashboard: React.FC = () => {
             }
         });
     };
-    const handlePromote = async (userToPromote: User) => { 
-        try {
-            await updateUserRole(userToPromote.id, userToPromote.role === 'admin' ? 'user' : 'admin');
-        } catch (e: any) {
-            alert("Erro ao alterar cargo do usuário: " + e.message);
+    const handlePromote = async (u: User) => {
+        const newRole = u.role === 'admin' ? 'user' : 'admin';
+        const actionText = newRole === 'admin' ? 'Promover para Administrador' : 'Remover privilégios de Administrador';
+        
+        setConfirmAction({
+            title: actionText,
+            message: `Tem certeza que deseja alterar o cargo de ${u.name} para ${newRole}?`,
+            loading: false,
+            onConfirm: async () => {
+                setConfirmAction(prev => prev ? { ...prev, loading: true } : null);
+                try {
+                    await updateUserRole(u.id, newRole);
+                    setConfirmAction(null);
+                } catch (e: any) {
+                    setErrorMsg("Erro ao alterar cargo: " + e.message);
+                    setConfirmAction(null);
+                }
+            }
+        });
+    };
+    const renderTerritoryCard = (m: Territory) => {
+        const isOverdue = m.dueDate && m.dueDate < new Date();
+        let borderColor = 'border-slate-200';
+        if (isOverdue) {
+            borderColor = 'border-red-200';
+        } else if (m.status === TerritoryStatus.IN_USE) {
+            borderColor = 'border-blue-200';
+        } else {
+            borderColor = 'border-emerald-200';
         }
+
+        return (
+            <div key={m.id} className={`bg-white p-6 rounded-3xl border-2 ${borderColor} ${isOverdue ? 'bg-red-50/50' : ''} shadow-sm transition-all duration-300 hover:shadow-md`}>
+                <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                            {m.number && (
+                                <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[11px] font-black tracking-wider shadow-sm">
+                                    Nº {m.number}
+                                </span>
+                            )}
+                            {isOverdue ? (
+                                <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[9px] font-black uppercase tracking-wider border border-red-200">Atrasado</span>
+                            ) : m.status === TerritoryStatus.IN_USE ? (
+                                <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
+                            ) : (
+                                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-emerald-100">Livre</span>
+                            )}
+                        </div>
+                        <h3 className="font-black text-slate-900 text-2xl tracking-tight leading-tight mb-1">{m.name}</h3>
+                        {m.status === TerritoryStatus.AVAILABLE && m.lastCompletedDate && (
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">
+                                Devolvido em {formatDate(m.lastCompletedDate)}
+                            </p>
+                        )}
+                        {m.locality && (
+                            <div className="flex items-center gap-1.5 text-blue-600">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                <p className="text-xs font-black uppercase tracking-widest truncate">{m.locality}</p>
+                            </div>
+                        )}
+                        <button onClick={() => window.open(m.pdfUrl, '_blank')} className="text-[10px] text-slate-400 font-black uppercase tracking-widest hover:text-blue-600 transition-colors mt-3 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                            Ver Documento
+                        </button>
+                    </div>
+                </div>
+
+                {(m.description || m.observation || m.permanentNotes) && (
+                    <div className="mb-4 p-3 bg-slate-50 rounded-xl space-y-2">
+                        {m.description && (
+                            <div>
+                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Descrição</p>
+                                <p className="text-[10px] font-bold text-slate-600 leading-tight">{m.description}</p>
+                            </div>
+                        )}
+                        {m.observation && (
+                            <div>
+                                <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest leading-none mb-1">Observação</p>
+                                <p className="text-[10px] font-bold text-slate-600 leading-tight italic">{m.observation}</p>
+                            </div>
+                        )}
+                        {m.permanentNotes && (
+                            <div>
+                                <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest leading-none mb-1">Notas Permanentes</p>
+                                <p className="text-[10px] font-bold text-slate-600 leading-tight">{m.permanentNotes}</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {m.history && m.history.length > 0 && (
+                    <div className="mb-4 p-3 bg-blue-50/30 rounded-xl border border-blue-100/50">
+                        <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Última Atividade</p>
+                        <div className="space-y-2">
+                            {m.history
+                                .slice(0, 1)
+                                .map((h, i) => (
+                                    <div key={i} className="bg-white/60 p-2 rounded-lg border border-blue-50">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-[9px] font-black text-slate-900">{h.userName}</span>
+                                            <span className="text-[8px] font-bold text-slate-400">{formatDate(h.completedDate)}</span>
+                                        </div>
+                                        {h.notes ? (
+                                            <p className="text-[10px] text-slate-600 font-medium leading-tight italic">"{h.notes}"</p>
+                                        ) : (
+                                            <p className="text-[10px] text-slate-400 font-medium leading-tight italic">Devolvido sem observações.</p>
+                                        )}
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="mt-4 flex justify-end gap-1 pt-4 border-t border-slate-50">
+                    <button onClick={() => setEditingTerritory(m)} title="Editar" className="p-2 text-slate-400 hover:text-blue-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg></button>
+                    <button onClick={() => setViewHistory(m)} title="Histórico" className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></button>
+                    {m.status === TerritoryStatus.IN_USE && (<button onClick={() => handleResetTerritory(m.id)} title="Retomar" className="p-2 text-slate-400 hover:text-amber-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg></button>)}
+                    <button onClick={() => handleDeleteTerritory(m.id)} title="Excluir" className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                </div>
+            </div>
+        );
     };
 
     // Memoized data processing
@@ -284,15 +401,37 @@ const AdminDashboard: React.FC = () => {
 
     const displayTerritories = useMemo(() => {
         let processed = [...territories];
+        const now = new Date();
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+        // Filter based on active tab
+        if (activeTab === 'territories') {
+            processed = processed.filter(t => {
+                if (t.status === TerritoryStatus.IN_USE) return true;
+                if (t.status === TerritoryStatus.AVAILABLE) {
+                    if (!t.lastCompletedDate) return true;
+                    const diff = now.getTime() - t.lastCompletedDate.getTime();
+                    return diff > THIRTY_DAYS_MS;
+                }
+                return true; // Other statuses like REQUESTED, CLOSED
+            });
+        } else if (activeTab === 'worked') {
+            processed = processed.filter(t => {
+                if (t.status !== TerritoryStatus.AVAILABLE || !t.lastCompletedDate) return false;
+                const diff = now.getTime() - t.lastCompletedDate.getTime();
+                return diff <= THIRTY_DAYS_MS;
+            });
+        }
         
         if (searchTerm) {
             processed = processed.filter(t => 
                 t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (t.number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 t.assignedToName?.toLowerCase().includes(searchTerm.toLowerCase())
             );
         }
 
-        if (filterStatus !== 'all') {
+        if (filterStatus !== 'all' && activeTab === 'territories') {
             processed = processed.filter(t => {
                 switch (filterStatus) {
                     case 'available': return t.status === TerritoryStatus.AVAILABLE;
@@ -301,6 +440,14 @@ const AdminDashboard: React.FC = () => {
                 }
             });
         }
+
+        const sortByNumber = (a: Territory, b: Territory) => {
+            const numA = parseInt(a.number) || 0;
+            const numB = parseInt(b.number) || 0;
+            if (numA !== numB) return numA - numB;
+            return (a.number || '').localeCompare(b.number || '', undefined, { numeric: true });
+        };
+
         processed.sort((a, b) => {
             switch (sortBy) {
                 case 'name': return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
@@ -317,25 +464,34 @@ const AdminDashboard: React.FC = () => {
                     return bDate - aDate;
                 }
                 default:
-                    // Default sort: Available first, then In Use
+                    // Default sort for Worked Maps: Newest return first (most recently worked)
+                    if (activeTab === 'worked') {
+                        const aDate = a.lastCompletedDate?.getTime() || 0;
+                        const bDate = b.lastCompletedDate?.getTime() || 0;
+                        return bDate - aDate;
+                    }
+
+                    // Default sort for Territories: Available first, then In Use
                     if (a.status === TerritoryStatus.AVAILABLE && b.status !== TerritoryStatus.AVAILABLE) return -1;
                     if (b.status === TerritoryStatus.AVAILABLE && a.status !== TerritoryStatus.AVAILABLE) return 1;
                     
-                    // Within Available, sort by lastCompletedDate (ascending) to put returned maps at the bottom
+                    // Within Available group in Territories tab, sort by return date (oldest first)
                     if (a.status === TerritoryStatus.AVAILABLE && b.status === TerritoryStatus.AVAILABLE) {
                         const aDate = a.lastCompletedDate?.getTime() || 0;
                         const bDate = b.lastCompletedDate?.getTime() || 0;
                         if (aDate !== bDate) return aDate - bDate;
-                        // If both never worked or worked at the same time, sort numerically
-                        return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
                     }
-                    
-                    // Within In Use, sort numerically
-                    return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+
+                    // Within groups, sort numerically by number
+                    return sortByNumber(a, b);
             }
         });
         return processed;
-    }, [territories, filterStatus, sortBy]);
+    }, [territories, filterStatus, sortBy, searchTerm, activeTab]);
+
+    const inUseTerritories = useMemo(() => displayTerritories.filter(t => t.status === TerritoryStatus.IN_USE), [displayTerritories]);
+    const availableTerritories = useMemo(() => displayTerritories.filter(t => t.status === TerritoryStatus.AVAILABLE), [displayTerritories]);
+    const otherTerritories = useMemo(() => displayTerritories.filter(t => t.status !== TerritoryStatus.IN_USE && t.status !== TerritoryStatus.AVAILABLE), [displayTerritories]);
 
     const stats = useMemo(() => {
         const total = territories.length;
@@ -410,10 +566,9 @@ const AdminDashboard: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-end gap-6 px-1">
                 <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-200 self-start md:self-auto">
                     <button onClick={() => setActiveTab('territories')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'territories' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Mapas</button>
-                    <button onClick={() => setActiveTab('assignments')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Atribuições</button>
+                    <button onClick={() => setActiveTab('worked')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'worked' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Trabalhados</button>
                     <button onClick={() => setActiveTab('users')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Usuários</button>
                     <button onClick={() => setActiveTab('stats')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'stats' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Estatísticas</button>
-                    <button onClick={() => setActiveTab('reports')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'reports' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Relatórios</button>
                 </div>
             </div>
 
@@ -496,7 +651,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
             )}
 
-            {activeTab === 'territories' ? (
+            {(activeTab === 'territories' || activeTab === 'worked') ? (
                 <>
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                         {[{ label: 'Total', value: stats.total, color: 'text-slate-900', border: 'border-slate-200' }, { label: 'Livres', value: stats.available, color: 'text-emerald-600', border: 'border-emerald-200' }, { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600', border: 'border-blue-200' }].map(s => (
@@ -504,7 +659,7 @@ const AdminDashboard: React.FC = () => {
                         ))}
                     </div>
 
-                    {requests.length > 0 && (
+                    {activeTab === 'territories' && requests.length > 0 && (
                         <div className="space-y-3">
                             <h2 className="text-[11px] font-black text-blue-900 uppercase tracking-[0.2em] px-2 flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>Solicitações Pendentes</h2>
                             <div className="space-y-2">
@@ -579,14 +734,16 @@ const AdminDashboard: React.FC = () => {
 
                     <div className="space-y-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
-                            <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">Territórios</h2>
+                            <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">
+                                {activeTab === 'territories' ? 'Territórios' : 'Mapas Trabalhados (Últimos 30 dias)'}
+                            </h2>
                             <div className="flex flex-1 max-w-md relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                                 </div>
                                 <input 
                                     type="text" 
-                                    placeholder="Buscar território..." 
+                                    placeholder="Buscar por número, nome ou publicador..." 
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="block w-full pl-10 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
@@ -621,7 +778,7 @@ const AdminDashboard: React.FC = () => {
                                                     <div>
                                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider px-3 pb-1">Ordenar por</p>
                                                         <div className="flex flex-col gap-1 sm:gap-0">
-                                                            <button onClick={() => { setSortBy('default'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'default' ? 'bg-blue-50 text-blue-700' : ''}`}>Padrão</button>
+                                                            <button onClick={() => { setSortBy('default'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'default' ? 'bg-blue-50 text-blue-700' : ''}`}>Padrão (Nº)</button>
                                                             <button onClick={() => { setSortBy('name'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'name' ? 'bg-blue-50 text-blue-700' : ''}`}>Nome (A-Z)</button>
                                                             <button onClick={() => { setSortBy('oldest'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'oldest' ? 'bg-blue-50 text-blue-700' : ''}`}>Mais Antigos</button>
                                                             <button onClick={() => { setSortBy('newest'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'newest' ? 'bg-blue-50 text-blue-700' : ''}`}>Mais Recentes</button>
@@ -638,104 +795,47 @@ const AdminDashboard: React.FC = () => {
                         </div>
                         
                         {displayTerritories.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {displayTerritories.map(m => {
-                                    const isOverdue = m.status === TerritoryStatus.IN_USE && (getDaysRemaining(m.dueDate) ?? 0) < 0;
-
-                                    let borderColor = 'border-slate-200';
-                                    if (isOverdue) {
-                                        borderColor = 'border-red-300';
-                                    } else if (m.status === TerritoryStatus.IN_USE) {
-                                        borderColor = 'border-blue-200';
-                                    } else {
-                                        borderColor = 'border-emerald-200';
-                                    }
-
-                                    return (
-                                        <div key={m.id} className={`bg-white p-6 rounded-3xl border-2 ${borderColor} ${isOverdue ? 'bg-red-50/50' : ''} shadow-sm transition-all duration-300 hover:shadow-md`}>
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                        {m.number && (
-                                                            <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[11px] font-black tracking-wider shadow-sm">
-                                                                Nº {m.number}
-                                                            </span>
-                                                        )}
-                                                        {isOverdue ? (
-                                                            <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[9px] font-black uppercase tracking-wider border border-red-200">Atrasado</span>
-                                                        ) : m.status === TerritoryStatus.IN_USE ? (
-                                                            <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
-                                                        ) : (
-                                                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-emerald-100">Livre</span>
-                                                        )}
-                                                    </div>
-                                                    <h3 className="font-black text-slate-900 text-2xl tracking-tight leading-tight mb-1">{m.name}</h3>
-                                                    {m.locality && (
-                                                        <div className="flex items-center gap-1.5 text-blue-600">
-                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                                            <p className="text-xs font-black uppercase tracking-widest truncate">{m.locality}</p>
-                                                        </div>
-                                                    )}
-                                                    <button onClick={() => window.open(m.pdfUrl, '_blank')} className="text-[10px] text-slate-400 font-black uppercase tracking-widest hover:text-blue-600 transition-colors mt-3 flex items-center gap-1">
-                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                                                        Ver Documento
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {(m.description || m.observation || m.permanentNotes) && (
-                                                <div className="mb-4 p-3 bg-slate-50 rounded-xl space-y-2">
-                                                    {m.description && (
-                                                        <div>
-                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Descrição</p>
-                                                            <p className="text-[10px] font-bold text-slate-600 leading-tight">{m.description}</p>
-                                                        </div>
-                                                    )}
-                                                    {m.observation && (
-                                                        <div>
-                                                            <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest leading-none mb-1">Observação</p>
-                                                            <p className="text-[10px] font-bold text-slate-600 leading-tight italic">{m.observation}</p>
-                                                        </div>
-                                                    )}
-                                                    {m.permanentNotes && (
-                                                        <div>
-                                                            <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest leading-none mb-1">Notas Permanentes</p>
-                                                            <p className="text-[10px] font-bold text-slate-600 leading-tight">{m.permanentNotes}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {m.history && m.history.length > 0 && m.history.some(h => h.notes) && (
-                                                <div className="mb-4 p-3 bg-blue-50/30 rounded-xl border border-blue-100/50">
-                                                    <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Últimas Observações</p>
-                                                    <div className="space-y-2">
-                                                        {m.history
-                                                            .filter(h => h.notes)
-                                                            .slice(-2)
-                                                            .reverse()
-                                                            .map((h, i) => (
-                                                                <div key={i} className="bg-white/60 p-2 rounded-lg border border-blue-50">
-                                                                    <div className="flex justify-between items-center mb-1">
-                                                                        <span className="text-[9px] font-black text-slate-900">{h.userName}</span>
-                                                                        <span className="text-[8px] font-bold text-slate-400">{formatDate(h.returnDate)}</span>
-                                                                    </div>
-                                                                    <p className="text-[10px] text-slate-600 font-medium leading-tight italic">"{h.notes}"</p>
-                                                                </div>
-                                                            ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div className="mt-4 flex justify-end gap-1 pt-4 border-t border-slate-50">
-                                                <button onClick={() => setEditingTerritory(m)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg></button>
-                                                <button onClick={() => setViewHistory(m)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></button>
-                                                {m.status === TerritoryStatus.IN_USE && (<button onClick={() => handleResetTerritory(m.id)} className="p-2 text-slate-400 hover:text-amber-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg></button>)}
-                                                <button onClick={() => handleDeleteTerritory(m.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                                            </div>
+                            <div className="space-y-8">
+                                {inUseTerritories.length > 0 && (filterStatus === 'all' || filterStatus === 'in_use') && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-3 px-2">
+                                            <div className="h-px flex-1 bg-blue-100"></div>
+                                            <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] whitespace-nowrap">Mapas Designados ({inUseTerritories.length})</h3>
+                                            <div className="h-px flex-1 bg-blue-100"></div>
                                         </div>
-                                    );
-                                })}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {inUseTerritories.map(m => renderTerritoryCard(m))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {availableTerritories.length > 0 && (filterStatus === 'all' || filterStatus === 'available') && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-3 px-2">
+                                            <div className="h-px flex-1 bg-emerald-100"></div>
+                                            <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.3em] whitespace-nowrap">
+                                                {activeTab === 'territories' ? 'Mapas Disponíveis' : 'Mapas em Quarentena'} ({availableTerritories.length})
+                                            </h3>
+                                            <div className="h-px flex-1 bg-emerald-100"></div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {availableTerritories.map(m => renderTerritoryCard(m))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {otherTerritories.length > 0 && filterStatus === 'all' && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-3 px-2">
+                                            <div className="h-px flex-1 bg-slate-100"></div>
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] whitespace-nowrap">Outros Status ({otherTerritories.length})</h3>
+                                            <div className="h-px flex-1 bg-slate-100"></div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {otherTerritories.map(m => renderTerritoryCard(m))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="text-center py-16 bg-white rounded-2xl border-2 border-slate-200 col-span-1 md:col-span-2">
@@ -745,103 +845,6 @@ const AdminDashboard: React.FC = () => {
                         )}
                     </div>
                 </>
-            ) : activeTab === 'assignments' ? (
-                <div className="space-y-6">
-                    <div className="flex items-center justify-between px-2">
-                        <div className="flex flex-col gap-1">
-                            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Atribuições Ativas</h2>
-                            <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100 w-fit">
-                                {territories.filter(t => t.status === TerritoryStatus.IN_USE).length} Mapas em Uso
-                            </span>
-                        </div>
-                        <button 
-                            onClick={() => setShowManualAssignModal(true)}
-                            className="px-6 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl shadow-lg hover:bg-black transition-all"
-                        >
-                            + Nova Atribuição
-                        </button>
-                    </div>
-
-                    <div className="bg-white rounded-[2rem] border-2 border-slate-100 shadow-sm overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50/50">
-                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Mapa</th>
-                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Publicador</th>
-                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Designado em</th>
-                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Prazo</th>
-                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Status</th>
-                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50">
-                                    {territories
-                                        .filter(t => t.status === TerritoryStatus.IN_USE)
-                                        .sort((a, b) => (a.dueDate?.getTime() || 0) - (b.dueDate?.getTime() || 0))
-                                        .map(t => {
-                                            const daysRemaining = getDaysRemaining(t.dueDate);
-                                            const isOverdue = daysRemaining !== null && daysRemaining < 0;
-                                            return (
-                                                <tr key={`assign-${t.id}`} className="hover:bg-slate-50/50 transition-colors group">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs font-black">{t.number || '?'}</span>
-                                                            <div>
-                                                                <p className="text-sm font-black text-slate-900">{t.name}</p>
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.locality}</p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-sm font-bold text-slate-700">{t.assignedToName || 'N/A'}</p>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-sm font-bold text-slate-600">
-                                                        {formatDate(t.assignmentDate)}
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <p className={`text-sm font-black ${isOverdue ? 'text-red-600' : 'text-slate-900'}`}>
-                                                            {formatDate(t.dueDate)}
-                                                        </p>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${isOverdue ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
-                                                            {isOverdue ? `Atrasado ${Math.abs(daysRemaining || 0)}d` : `${daysRemaining} dias`}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-1">
-                                                            <button 
-                                                                onClick={() => setEditingAssignment(t)}
-                                                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                                                                title="Editar Datas"
-                                                            >
-                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                                                            </button>
-                                                            <button 
-                                                                onClick={() => handleResetTerritory(t.id)}
-                                                                className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
-                                                                title="Retomar Território"
-                                                            >
-                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg>
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    {territories.filter(t => t.status === TerritoryStatus.IN_USE).length === 0 && (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-bold">
-                                                Nenhuma atribuição ativa no momento.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
             ) : activeTab === 'users' ? (
                 <div className="space-y-4">
                     <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] px-2">Gestão de Usuários</h2>
@@ -855,7 +858,9 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 </div>
             ) : (
-                <AssignmentsReport territories={territories} users={users} />
+                <div className="space-y-6">
+                    {/* Stats content already rendered above if activeTab is stats, but we need to handle the case where it's not territories/worked/users */}
+                </div>
             )}
         </div>
     );

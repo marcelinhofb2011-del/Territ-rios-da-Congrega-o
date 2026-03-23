@@ -905,6 +905,7 @@ export const submitReport = async (user: User, territoryId: string, notes: strin
                 assignmentDate: null,
                 dueDate: null,
                 lastCompletedDate: Timestamp.now(),
+                workedOn: false,
                 history: [...currentHistory, historyEntry]
             });
         });
