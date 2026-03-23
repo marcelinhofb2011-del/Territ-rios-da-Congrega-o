@@ -1,5 +1,5 @@
 {
   "name": "territorio",
-  "description": "Um sistema completo para gerenciar territórios de congregação, incluindo solicitação, atribuição, controle de prazo e relatórios. Construído com React e LocalStorage para uma experiência estável e offline.",
+  "description": "Um sistema completo para gerenciar territórios de congregação, incluindo solicitação, atribuição, controle de prazo e relatórios. Construído com React e Firebase para uma experiência estável e em tempo real.",
   "requestFramePermissions": []
 }

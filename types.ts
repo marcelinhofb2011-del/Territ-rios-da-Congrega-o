@@ -32,6 +32,10 @@ export interface TerritoryHistory {
 export interface Territory {
   id: string;
   name: string;
+  number: string;
+  locality: string;
+  description: string;
+  observation: string;
   status: TerritoryStatus;
   pdfUrl: string;
   createdAt: Date;
@@ -39,9 +43,11 @@ export interface Territory {
   assignedToName: string | null;
   assignmentDate: Date | null;
   dueDate: Date | null;
+  lastCompletedDate: Date | null;
+  assignmentOrder?: number;
   history: TerritoryHistory[];
   permanentNotes?: string;
-  campaignMode?: boolean;
+  workedOn?: boolean;
 }
 
 export interface TerritoryRequest {

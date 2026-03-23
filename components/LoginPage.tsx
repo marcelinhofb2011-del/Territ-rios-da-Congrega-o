@@ -5,16 +5,18 @@ import { MapIcon } from './Icon';
 
 const LoginPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isResetting, setIsResetting] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, signUp } = useAuth();
+  const { login, signUp, resetPassword } = useAuth();
 
   const toggleMode = (loginMode: boolean) => {
     setIsLogin(loginMode);
+    setIsResetting(false);
     setName('');
     setEmail('');
     setPassword('');
@@ -22,8 +24,32 @@ const LoginPage: React.FC = () => {
     setSuccess('');
   };
 
+  const handleResetPassword = async () => {
+    if (!email.trim()) {
+      setError("Por favor, insira seu e-mail para recuperar a senha.");
+      return;
+    }
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      await resetPassword(email);
+      setSuccess("E-mail de recuperação enviado! Verifique sua caixa de entrada.");
+      setIsResetting(false);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao enviar e-mail de recuperação.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isResetting) {
+      await handleResetPassword();
+      return;
+    }
+
     setError('');
     setSuccess('');
     setLoading(true);
@@ -62,14 +88,14 @@ const LoginPage: React.FC = () => {
             <button 
               type="button"
               onClick={() => toggleMode(true)}
-              className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${isLogin ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${isLogin && !isResetting ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'}`}
             >
               ENTRAR
             </button>
             <button 
               type="button"
               onClick={() => toggleMode(false)}
-              className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${!isLogin ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${!isLogin && !isResetting ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'}`}
             >
               CADASTRAR
             </button>
@@ -88,7 +114,7 @@ const LoginPage: React.FC = () => {
               </div>
             )}
 
-            {!isLogin && (
+            {!isLogin && !isResetting && (
               <div>
                 <label className="block text-[11px] font-black text-slate-600 uppercase tracking-widest mb-2 ml-1">Nome Completo</label>
                 <input 
@@ -114,30 +140,37 @@ const LoginPage: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-[11px] font-black text-slate-600 uppercase tracking-widest mb-2 ml-1">Senha Segura</label>
-              <input 
-                type="password" 
-                value={password} 
-                onChange={e => setPassword(e.target.value)}
-                className="w-full px-5 py-4 bg-white border border-slate-300 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none font-bold transition-all placeholder-slate-400 text-slate-900 shadow-sm" 
-                placeholder="••••••••"
-                required 
-              />
-            </div>
+            {!isResetting && (
+              <div>
+                <label className="block text-[11px] font-black text-slate-600 uppercase tracking-widest mb-2 ml-1">Senha Segura</label>
+                <input 
+                  type="password" 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full px-5 py-4 bg-white border border-slate-300 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none font-bold transition-all placeholder-slate-400 text-slate-900 shadow-sm" 
+                  placeholder="••••••••"
+                  required 
+                />
+              </div>
+            )}
 
             <button 
               type="submit" 
               disabled={loading}
               className="w-full py-5 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all transform active:scale-[0.98] shadow-xl shadow-blue-200 disabled:bg-blue-300 mt-2 uppercase tracking-widest text-sm"
             >
-              {loading ? 'Processando...' : (isLogin ? 'Entrar no Sistema' : 'Criar minha Conta')}
+              {loading ? 'Processando...' : (isResetting ? 'Enviar E-mail de Recuperação' : (isLogin ? 'Entrar no Sistema' : 'Criar minha Conta'))}
             </button>
           </form>
 
-          {isLogin && (
+          {isLogin && !isResetting && (
             <p className="text-center mt-8 text-xs font-bold text-slate-500">
-              Esqueceu sua senha? <span className="text-blue-600 cursor-pointer hover:underline font-black">Recuperar</span>
+              Esqueceu sua senha? <span onClick={() => { setIsResetting(true); setError(''); setSuccess(''); }} className="text-blue-600 cursor-pointer hover:underline font-black">Recuperar</span>
+            </p>
+          )}
+          {isResetting && (
+            <p className="text-center mt-8 text-xs font-bold text-slate-500">
+              Lembrou a senha? <span onClick={() => { setIsResetting(false); setError(''); setSuccess(''); }} className="text-blue-600 cursor-pointer hover:underline font-black">Voltar ao Login</span>
             </p>
           )}
         </div>

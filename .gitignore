@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# AI Studio / Platform specific
+.gemini
+migrated_prompt_history
+supabase
+.env

@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with roles and permissions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "user", "publisher"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "fcmTokens": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "uid", "name", "email", "role"]
+    },
+    "Territory": {
+      "title": "Territory",
+      "description": "A preaching territory map.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "number": { "type": "string" },
+        "locality": { "type": "string" },
+        "description": { "type": "string" },
+        "observation": { "type": "string" },
+        "status": { "type": "string", "enum": ["disponivel", "solicitado", "em_uso", "fechado"] },
+        "pdfUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "assignedTo": { "type": "string" },
+        "assignedToName": { "type": "string" },
+        "assignmentDate": { "type": "string", "format": "date-time" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "permanentNotes": { "type": "string" },
+        "history": { "type": "array", "items": { "$ref": "TerritoryHistory" } }
+      },
+      "required": ["name", "status", "pdfUrl"]
+    },
+    "TerritoryHistory": {
+      "title": "TerritoryHistory",
+      "description": "Historical record of territory assignment.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "assignmentDate": { "type": "string", "format": "date-time" },
+        "completedDate": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      }
+    },
+    "TerritoryRequest": {
+      "title": "TerritoryRequest",
+      "description": "A request for a new territory.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "requestDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pendente", "aprovado", "rejeitado"] }
+      }
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "In-app notification.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "/territories/{territoryId}": {
+      "schema": "Territory",
+      "description": "Territory maps."
+    },
+    "/requests/{requestId}": {
+      "schema": "TerritoryRequest",
+      "description": "Territory requests."
+    },
+    "/notifications/{notificationId}": {
+      "schema": "AppNotification",
+      "description": "User notifications."
+    }
+  }
+}

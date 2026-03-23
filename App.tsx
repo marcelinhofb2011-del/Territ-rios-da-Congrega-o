@@ -6,6 +6,7 @@ import AdminDashboard from './components/AdminDashboard';
 import PublisherDashboard from './components/PublisherDashboard';
 import Header from './components/Header';
 import { usePushNotifications } from './hooks/usePushNotifications';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
@@ -23,8 +24,8 @@ const AppContent: React.FC = () => {
     return <LoginPage />;
   }
 
-  // Verificação de Role
-  const isAdmin = user.role === 'admin';
+  // Verificação de Role com fallback de segurança para o proprietário
+  const isAdmin = user.role === 'admin' || user.email?.toLowerCase() === 'marcelinhofb2011@gmail.com';
 
   return (
     <div className={`min-h-screen ${isAdmin ? 'bg-slate-50' : 'bg-gray-50'}`}>
@@ -42,9 +43,11 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 };
 

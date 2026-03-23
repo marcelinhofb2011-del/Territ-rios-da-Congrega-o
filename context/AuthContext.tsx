@@ -1,7 +1,7 @@
 
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { User } from '../types';
-import { apiLogin, apiLogout, apiSignUp } from '../services/api';
+import { apiLogin, apiLogout, apiSignUp, apiResetPassword, getOrCreateUserProfile } from '../services/api';
 import { auth, db } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -12,6 +12,7 @@ interface AuthContextType {
   login: (email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
   signUp: (name: string, email: string, pass: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,44 +22,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log("AuthContext: Setting up onAuthStateChanged listener");
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
+      console.log("AuthContext: onAuthStateChanged fired", firebaseUser ? "User exists" : "No user");
+      
       if (firebaseUser) {
-        try {
-          let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          
-          if (!userDoc.exists()) {
-             // Pequena espera para garantir que o Firestore processou o registro inicial (caso seja novo usuário)
-             await new Promise(r => setTimeout(r, 800));
-             userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          }
+        setLoading(true);
+        // Timeout de 15 segundos para evitar travamento infinito
+        const timeoutId = setTimeout(() => {
+          setLoading(false);
+          console.warn("AuthContext: Carregamento do perfil excedeu o tempo limite.");
+        }, 15000);
 
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            const loggedUser = { 
-                ...data, 
-                id: userDoc.id,
-                name: data.name || data.nome || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário'
-            } as User;
-            setUser(loggedUser);
-          } else {
-            const fallback: User = {
-              id: firebaseUser.uid,
-              uid: firebaseUser.uid,
-              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuário',
-              email: firebaseUser.email || '',
-              role: 'user',
-              active: true,
-              createdAt: new Date()
-            };
-            setUser(fallback);
-          }
+        try {
+          console.log("AuthContext: Fetching user profile for", firebaseUser.uid);
+          const loggedUser = await getOrCreateUserProfile(firebaseUser);
+          console.log("AuthContext: User profile fetched", loggedUser);
+          setUser(loggedUser);
         } catch (error) {
           console.error("Erro crítico ao carregar perfil:", error);
         } finally {
+          clearTimeout(timeoutId);
+          console.log("AuthContext: Setting loading to false (user exists)");
           setLoading(false);
         }
       } else {
+        console.log("AuthContext: Setting loading to false (no user)");
         setUser(null);
         setLoading(false);
       }
@@ -96,8 +85,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const resetPassword = async (email: string) => {
+    setLoading(true);
+    try {
+        await apiResetPassword(email);
+    } catch (e) {
+        throw e;
+    } finally {
+        setLoading(false);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, signUp }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, signUp, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

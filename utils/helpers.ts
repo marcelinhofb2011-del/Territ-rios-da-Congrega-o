@@ -19,25 +19,8 @@ export const getDaysRemaining = (dueDate: Date | undefined | null): number | nul
 };
 
 /**
- * Retorna true se o território foi trabalhado nos últimos 60 dias e NÃO está em modo campanha.
+ * Retorna a cor e o rótulo baseados no prazo de entrega.
  */
-export const isRecentWork = (history: any[] | undefined, campaignMode?: boolean): boolean => {
-    if (campaignMode) return false;
-    if (!history || history.length === 0) return false;
-    
-    // O histórico já vem ordenado pela API (mais recente primeiro)
-    const lastEntry = history[0];
-    const completedDate = lastEntry.completedDate instanceof Date 
-        ? lastEntry.completedDate 
-        : lastEntry.completedDate?.toDate?.() || new Date(lastEntry.completedDate);
-
-    const today = new Date();
-    const diffTime = today.getTime() - completedDate.getTime();
-    const diffDays = diffTime / (1000 * 60 * 60 * 24);
-    
-    return diffDays < 60; 
-};
-
 export const getDeadlineColorInfo = (dueDate: Date | undefined | null): { textColor: string, bgColor: string, label: string } => {
   const daysRemaining = getDaysRemaining(dueDate);
 

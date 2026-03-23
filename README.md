@@ -1,6 +1,6 @@
-# Gerenciador de Territórios (Firebase Edition)
+# Gerenciador de Territórios
 
-Sistema profissional para gestão de territórios de congregação.
+Sistema profissional para gestão de territórios de congregação, configurado para o projeto Firebase `territorio-70c0c`.
 
 ## 🚀 Tecnologias
 - **Frontend**: React + Tailwind CSS
@@ -11,12 +11,9 @@ Sistema profissional para gestão de territórios de congregação.
 ## 🛠 Configuração no Firebase Console
 
 1.  **Authentication**: Ative o método "E-mail/Senha".
-2.  **Firestore**: Crie o banco de dados em "Production Mode" e aplique as regras contidas em `firebase/firestore.rules`.
-3.  **Storage**: Crie o bucket e aplique as regras em `firebase/storage.rules`.
-4.  **Primeiro Admin**: O primeiro usuário a se cadastrar no sistema recebe automaticamente a função de `admin`. Você pode alterar as funções de outros usuários através do painel "Usuários" dentro do app.
-
-## 📂 Estrutura de Pastas do Storage
-Os mapas devem ser salvos na pasta `/maps/` dentro do Storage. O sistema gerencia os nomes automaticamente usando timestamps para evitar duplicidade.
+2.  **Firestore**: O banco de dados já está configurado no projeto `territorio-70c0c`. As regras de segurança estão em `firestore.rules`.
+3.  **Storage**: Os arquivos são armazenados na pasta `/maps/`.
+4.  **Admin**: O usuário `marcelinhofb2011@gmail.com` está configurado como administrador mestre.
 
 ---
-*territorio v1.7 - Integrado com Firebase*
+*territorio v1.8 - Projeto: territorio-70c0c*

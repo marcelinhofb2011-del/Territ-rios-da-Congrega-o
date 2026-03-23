@@ -2,15 +2,19 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus } from '../types';
 import { 
     assignTerritoryToRequest, rejectRequest, 
-    updateTerritory, deleteTerritory, updateUserRole, adminResetTerritory
+    updateTerritory, deleteTerritory, updateUserRole, adminResetTerritory,
+    parseDate, hydrateHistory
 } from '../services/api';
-import { formatDate, isRecentWork, getDaysRemaining } from '../utils/helpers';
+import { formatDate, getDaysRemaining } from '../utils/helpers';
 import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import MapViewerModal from './modals/MapViewerModal';
 import TerritoryHistoryModal from './modals/TerritoryHistoryModal';
 import AddMapModal from './modals/AddMapModal';
 import EditMapModal from './modals/EditMapModal';
+import ConfirmModal from './modals/ConfirmModal';
+import ManualAssignmentModal from './modals/ManualAssignmentModal';
+import EditAssignmentDatesModal from './modals/EditAssignmentDatesModal';
 import AssignmentsReport from './AssignmentsReport';
 import { useAuth } from '../hooks/useAuth';
 
@@ -26,18 +30,27 @@ const AdminDashboard: React.FC = () => {
     const [requests, setRequests] = useState<TerritoryRequest[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'territories' | 'users' | 'assignments'>('territories');
-    
-    // UI States
+    const [activeTab, setActiveTab] = useState<'territories' | 'users' | 'reports'>('territories');
+    const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingTerritory, setEditingTerritory] = useState<Territory | null>(null);
     const [viewHistory, setViewHistory] = useState<Territory | null>(null);
     const [viewingMap, setViewingMap] = useState<Territory | null>(null);
     const [fulfillingRequestId, setFulfillingRequestId] = useState<string | null>(null);
-    const [selectedMapForRequest, setSelectedMapForRequest] = useState<string>('');
+    const [selectedMapsForRequest, setSelectedMapsForRequest] = useState<string[]>([]);
+    const [showManualAssignModal, setShowManualAssignModal] = useState(false);
+    const [editingAssignment, setEditingAssignment] = useState<Territory | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        isDanger?: boolean;
+        loading?: boolean;
+    } | null>(null);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     // Filter and Sort States
-    const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'resting' | 'in_use'>('all');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'in_use'>('all');
     const [sortBy, setSortBy] = useState<'default' | 'name' | 'oldest' | 'newest'>('default');
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const filterMenuRef = useRef<HTMLDivElement>(null);
@@ -57,42 +70,66 @@ const AdminDashboard: React.FC = () => {
 
     // Listeners for realtime data
     useEffect(() => {
+        if (user) {
+            console.log("AdminDashboard: Current user role:", user.role);
+        }
         const territoriesQuery = query(collection(db, 'territories'));
         const unsubscribeTerritories = onSnapshot(territoriesQuery, (snapshot) => {
             const territoriesList = snapshot.docs.map(doc => {
                 const data = doc.data();
-                const rawHistory = data.history || [];
-                const history = rawHistory.map((h: any) => {
-                    const completed = h.completedDate?.toDate() ?? new Date();
-                    return {
-                        ...h,
-                        assignmentDate: h.assignmentDate?.toDate() ?? completed,
-                        completedDate: completed
-                    };
-                }).sort((a,b) => b.completedDate.getTime() - a.completedDate.getTime());
+                const history = hydrateHistory(data.history || []);
 
                 return {
                     ...data,
                     id: doc.id,
                     name: data.name || 'Sem Nome',
-                    createdAt: data.createdAt?.toDate() || new Date(),
-                    assignmentDate: data.assignmentDate?.toDate() || null,
-                    dueDate: data.dueDate?.toDate() || null,
+                    createdAt: parseDate(data.createdAt) || new Date(),
+                    assignmentDate: parseDate(data.assignmentDate),
+                    dueDate: parseDate(data.dueDate),
                     history: history
                 } as Territory;
             });
             setTerritories(territoriesList);
+            if (loading) setLoading(false);
+        }, (err) => {
+            console.error("Erro no listener de territórios:", err);
             if (loading) setLoading(false);
         });
 
         // Other listeners...
         const usersQuery = query(collection(db, 'users'));
         const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-            setUsers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, name: doc.data().name || doc.data().email?.split('@')[0] || 'Sem Nome', createdAt: doc.data().createdAt?.toDate() || new Date() } as User)).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+            const usersMap = new Map<string, User>();
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                const email = (data.email || '').toLowerCase();
+                const u = { 
+                    ...data, 
+                    id: doc.id, 
+                    name: data.name || data.email?.split('@')[0] || 'Sem Nome', 
+                    createdAt: parseDate(data.createdAt) || new Date() 
+                } as User;
+
+                if (usersMap.has(email)) {
+                    const existing = usersMap.get(email)!;
+                    if (u.role === 'admin' && existing.role !== 'admin') {
+                        usersMap.set(email, u);
+                    }
+                } else {
+                    usersMap.set(email, u);
+                }
+            });
+            setUsers(Array.from(usersMap.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+        }, (err) => {
+            console.error("Erro no listener de usuários:", err);
         });
         const requestsQuery = query(collection(db, 'requests'), where('status', '==', RequestStatus.PENDING));
         const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
-            setRequests(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, requestDate: doc.data().requestDate?.toDate() || new Date() } as TerritoryRequest)).sort((a, b) => b.requestDate.getTime() - a.requestDate.getTime()));
+            const reqs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, requestDate: parseDate(doc.data().requestDate) || new Date() } as TerritoryRequest)).sort((a, b) => b.requestDate.getTime() - a.requestDate.getTime());
+            console.log("AdminDashboard: Pending requests:", reqs.length);
+            setRequests(reqs);
+        }, (err) => {
+            console.error("Erro no listener de solicitações:", err);
         });
 
         return () => {
@@ -100,42 +137,84 @@ const AdminDashboard: React.FC = () => {
             unsubscribeUsers();
             unsubscribeRequests();
         };
-    }, [loading]);
+    }, [loading, user]);
     
     // Handlers
     const handleFulfillRequest = async (requestId: string) => {
-        if (!selectedMapForRequest) return;
+        if (selectedMapsForRequest.length === 0) return;
         try {
-            await assignTerritoryToRequest(requestId, selectedMapForRequest);
-            setFulfillingRequestId(null); setSelectedMapForRequest('');
-        } catch (e: any) { alert(e.message); }
+            await assignTerritoryToRequest(requestId, selectedMapsForRequest);
+            setFulfillingRequestId(null); 
+            setSelectedMapsForRequest([]);
+        } catch (e: any) { 
+            setErrorMsg(e.message); 
+        }
     };
-    const handleReject = async (id: string) => { if (confirm("Rejeitar esta solicitação?")) await rejectRequest(id); };
-    const handleDeleteTerritory = async (id: string) => { if (confirm("Tem certeza que deseja excluir este território?")) await deleteTerritory(id); };
-    const handleResetTerritory = async (id: string) => {
-        if (!user) return alert("Erro: usuário administrador não encontrado.");
-        if (confirm("Deseja retomar este território? Ele voltará a ficar disponível e a ação será registrada no histórico.")) await adminResetTerritory(id, user);
-    };
-    const handlePromote = async (user: User) => { await updateUserRole(user.id, user.role === 'admin' ? 'user' : 'admin'); };
-    const handleToggleCampaignMode = async (id: string, current: boolean) => {
-        try {
-            await updateTerritory(id, { campaignMode: !current });
-        } catch (e: any) { alert(e.message); }
-    };
-    const handleBulkCampaignMode = async (enable: boolean) => {
-        const action = enable ? 'ativar' : 'desativar';
-        if (confirm(`Deseja ${action} o modo campanha para os territórios? Isso tornará os mapas em descanso disponíveis imediatamente.`)) {
-            try {
-                // Se for para ativar, pegamos os que estão em descanso. 
-                // Se for para desativar, pegamos os que estão com campaignMode true.
-                const targets = enable 
-                    ? territories.filter(t => t.status === TerritoryStatus.AVAILABLE && isRecentWork(t.history, false))
-                    : territories.filter(t => t.campaignMode === true);
-                
-                for (const t of targets) {
-                    await updateTerritory(t.id, { campaignMode: enable });
+    const handleReject = async (id: string) => { 
+        setConfirmAction({
+            title: "Rejeitar Solicitação",
+            message: "Tem certeza que deseja recusar este pedido de território?",
+            isDanger: true,
+            loading: false,
+            onConfirm: async () => {
+                setConfirmAction(prev => prev ? { ...prev, loading: true } : null);
+                try {
+                    console.log("Rejeitando solicitação:", id);
+                    await rejectRequest(id);
+                    setConfirmAction(null);
+                } catch (e: any) {
+                    console.error("Erro ao rejeitar:", e);
+                    setErrorMsg("Erro ao rejeitar solicitação: " + e.message);
+                    setConfirmAction(null);
                 }
-            } catch (e: any) { alert(e.message); }
+            }
+        });
+    };
+    const handleDeleteTerritory = async (id: string) => { 
+        setConfirmAction({
+            title: "Excluir Território",
+            message: "Esta ação é irreversível. Tem certeza que deseja apagar este mapa?",
+            isDanger: true,
+            loading: false,
+            onConfirm: async () => {
+                setConfirmAction(prev => prev ? { ...prev, loading: true } : null);
+                try {
+                    console.log("Excluindo território:", id);
+                    await deleteTerritory(id);
+                    setConfirmAction(null);
+                } catch (e: any) {
+                    console.error("Erro ao excluir:", e);
+                    setErrorMsg("Erro ao excluir território: " + e.message);
+                    setConfirmAction(null);
+                }
+            }
+        });
+    };
+    const handleResetTerritory = async (id: string) => {
+        if (!user) return setErrorMsg("Erro: usuário administrador não encontrado.");
+        setConfirmAction({
+            title: "Retomar Território",
+            message: "Deseja retomar este território? Ele voltará a ficar disponível e a ação será registrada no histórico.",
+            loading: false,
+            onConfirm: async () => {
+                setConfirmAction(prev => prev ? { ...prev, loading: true } : null);
+                try {
+                    console.log("Retomando território:", id);
+                    await adminResetTerritory(id, user);
+                    setConfirmAction(null);
+                } catch (e: any) {
+                    console.error("Erro ao retomar:", e);
+                    setErrorMsg("Erro ao retomar território: " + e.message);
+                    setConfirmAction(null);
+                }
+            }
+        });
+    };
+    const handlePromote = async (userToPromote: User) => { 
+        try {
+            await updateUserRole(userToPromote.id, userToPromote.role === 'admin' ? 'user' : 'admin');
+        } catch (e: any) {
+            alert("Erro ao alterar cargo do usuário: " + e.message);
         }
     };
 
@@ -144,21 +223,31 @@ const AdminDashboard: React.FC = () => {
         return territories
             .filter(t => t.status === TerritoryStatus.AVAILABLE)
             .sort((a, b) => {
-                const aRecent = isRecentWork(a.history, a.campaignMode);
-                const bRecent = isRecentWork(b.history, b.campaignMode);
-                if (!aRecent && bRecent) return -1;
-                if (aRecent && !bRecent) return 1;
+                const aDate = a.lastCompletedDate?.getTime() || 0;
+                const bDate = b.lastCompletedDate?.getTime() || 0;
+                
+                if (aDate !== bDate) {
+                    return aDate - bDate;
+                }
+                
                 return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
             });
     }, [territories]);
 
     const displayTerritories = useMemo(() => {
         let processed = [...territories];
+        
+        if (searchTerm) {
+            processed = processed.filter(t => 
+                t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                t.assignedToName?.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+
         if (filterStatus !== 'all') {
             processed = processed.filter(t => {
                 switch (filterStatus) {
-                    case 'available': return t.status === TerritoryStatus.AVAILABLE && !isRecentWork(t.history, t.campaignMode);
-                    case 'resting': return t.status === TerritoryStatus.AVAILABLE && isRecentWork(t.history, t.campaignMode);
+                    case 'available': return t.status === TerritoryStatus.AVAILABLE;
                     case 'in_use': return t.status === TerritoryStatus.IN_USE;
                     default: return true;
                 }
@@ -168,25 +257,33 @@ const AdminDashboard: React.FC = () => {
             switch (sortBy) {
                 case 'name': return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
                 case 'oldest': {
-                    const aDate = a.history?.[0]?.completedDate?.getTime() || 0;
-                    const bDate = b.history?.[0]?.completedDate?.getTime() || 0;
+                    const aDate = a.lastCompletedDate?.getTime() || 0;
+                    const bDate = b.lastCompletedDate?.getTime() || 0;
                     if (aDate === 0 && bDate > 0) return -1;
                     if (bDate === 0 && aDate > 0) return 1;
                     return aDate - bDate;
                 }
                 case 'newest': {
-                    const aDate = a.history?.[0]?.completedDate?.getTime() || 0;
-                    const bDate = b.history?.[0]?.completedDate?.getTime() || 0;
+                    const aDate = a.lastCompletedDate?.getTime() || 0;
+                    const bDate = b.lastCompletedDate?.getTime() || 0;
                     return bDate - aDate;
                 }
                 default:
-                    if (a.status === TerritoryStatus.IN_USE && b.status !== TerritoryStatus.IN_USE) return 1;
-                    if (b.status === TerritoryStatus.IN_USE && a.status !== TerritoryStatus.IN_USE) return -1;
-                    if (!isRecentWork(a.history, a.campaignMode) && isRecentWork(b.history, b.campaignMode)) return -1;
-                    if (isRecentWork(a.history, a.campaignMode) && !isRecentWork(b.history, b.campaignMode)) return 1;
-                    const aDate = a.history?.[0]?.completedDate?.getTime() || 0;
-                    const bDate = b.history?.[0]?.completedDate?.getTime() || 0;
-                    return bDate - aDate;
+                    // Default sort: Available first, then In Use
+                    if (a.status === TerritoryStatus.AVAILABLE && b.status !== TerritoryStatus.AVAILABLE) return -1;
+                    if (b.status === TerritoryStatus.AVAILABLE && a.status !== TerritoryStatus.AVAILABLE) return 1;
+                    
+                    // Within Available, sort by lastCompletedDate (ascending) to put returned maps at the bottom
+                    if (a.status === TerritoryStatus.AVAILABLE && b.status === TerritoryStatus.AVAILABLE) {
+                        const aDate = a.lastCompletedDate?.getTime() || 0;
+                        const bDate = b.lastCompletedDate?.getTime() || 0;
+                        if (aDate !== bDate) return aDate - bDate;
+                        // If both never worked or worked at the same time, sort numerically
+                        return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+                    }
+                    
+                    // Within In Use, sort numerically
+                    return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
             }
         });
         return processed;
@@ -194,8 +291,7 @@ const AdminDashboard: React.FC = () => {
 
     const stats = useMemo(() => ({
         total: territories.length,
-        available: territories.filter(t => t.status === TerritoryStatus.AVAILABLE && !isRecentWork(t.history, t.campaignMode)).length,
-        resting: territories.filter(t => t.status === TerritoryStatus.AVAILABLE && isRecentWork(t.history, t.campaignMode)).length,
+        available: territories.filter(t => t.status === TerritoryStatus.AVAILABLE).length,
         inUse: territories.filter(t => t.status === TerritoryStatus.IN_USE).length,
     }), [territories]);
 
@@ -212,21 +308,43 @@ const AdminDashboard: React.FC = () => {
         <div className="max-w-6xl mx-auto space-y-8 pb-20">
             {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={() => {}} />}
             {editingTerritory && <EditMapModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={() => {}} />}
+            {showManualAssignModal && <ManualAssignmentModal territories={territories} users={users} onClose={() => setShowManualAssignModal(false)} onSuccess={() => {}} />}
+            {editingAssignment && <EditAssignmentDatesModal territory={editingAssignment} onClose={() => setEditingAssignment(null)} onSuccess={() => {}} />}
             {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
-            {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} onClose={() => setViewingMap(null)} />}
+            {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} number={viewingMap.number} onClose={() => setViewingMap(null)} />}
+            
+            {confirmAction && (
+                <ConfirmModal 
+                    title={confirmAction.title}
+                    message={confirmAction.message}
+                    isDanger={confirmAction.isDanger}
+                    loading={confirmAction.loading}
+                    onConfirm={confirmAction.onConfirm}
+                    onCancel={() => setConfirmAction(null)}
+                />
+            )}
+
+            {errorMsg && (
+                <div className="fixed bottom-4 right-4 z-[110] bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-4">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <p className="text-xs font-black uppercase tracking-widest">{errorMsg}</p>
+                    <button onClick={() => setErrorMsg(null)} className="ml-4 p-1 hover:bg-white/20 rounded-lg">&times;</button>
+                </div>
+            )}
 
             <div className="flex flex-col md:flex-row md:items-center justify-end gap-6 px-1">
                 <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-200 self-start md:self-auto">
                     <button onClick={() => setActiveTab('territories')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'territories' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Mapas</button>
+                    <button onClick={() => setActiveTab('assignments')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Atribuições</button>
                     <button onClick={() => setActiveTab('users')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Usuários</button>
-                    <button onClick={() => setActiveTab('assignments')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Designação</button>
+                    <button onClick={() => setActiveTab('reports')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'reports' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Relatórios</button>
                 </div>
             </div>
 
             {activeTab === 'territories' ? (
                 <>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        {[{ label: 'Total', value: stats.total, color: 'text-slate-900', border: 'border-slate-200' }, { label: 'Livres', value: stats.available, color: 'text-emerald-600', border: 'border-emerald-200' }, { label: 'Descanso', value: stats.resting, color: 'text-amber-500', border: 'border-amber-200' }, { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600', border: 'border-blue-200' }].map(s => (
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        {[{ label: 'Total', value: stats.total, color: 'text-slate-900', border: 'border-slate-200' }, { label: 'Livres', value: stats.available, color: 'text-emerald-600', border: 'border-emerald-200' }, { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600', border: 'border-blue-200' }].map(s => (
                             <div key={s.label} className={`bg-white p-5 rounded-2xl border-2 ${s.border}`}><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.label}</p><p className={`text-2xl font-black ${s.color}`}>{s.value}</p></div>
                         ))}
                     </div>
@@ -240,17 +358,51 @@ const AdminDashboard: React.FC = () => {
                                         <div><p className="font-black text-slate-900">{req.userName}</p><p className="text-[10px] text-slate-400 font-bold">{formatDate(req.requestDate)}</p></div>
                                         <div className="flex flex-1 max-w-sm items-center gap-2">
                                             {fulfillingRequestId === req.id ? (
-                                                <div className="flex items-center gap-2 w-full animate-in slide-in-from-right-1">
-                                                    <select value={selectedMapForRequest} onChange={e => setSelectedMapForRequest(e.target.value)} className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs outline-none">
-                                                        <option value="">Escolher...</option>
-                                                        {availableMapsOptions.map(m => (<option key={m.id} value={m.id}>{m.name} {isRecentWork(m.history, m.campaignMode) ? '(Descanso)' : ''}</option>))}
-                                                    </select>
-                                                    <button onClick={() => handleFulfillRequest(req.id)} disabled={!selectedMapForRequest} className="px-4 py-2 bg-emerald-600 text-white font-black text-[10px] rounded-lg">OK</button>
-                                                    <button onClick={() => setFulfillingRequestId(null)} className="p-2 text-slate-400">&times;</button>
+                                                <div className="flex flex-col gap-2 w-full animate-in slide-in-from-right-1">
+                                                    <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 bg-slate-50">
+                                                        {availableMapsOptions.length === 0 ? (
+                                                            <p className="text-[10px] text-slate-400 text-center py-2">Nenhum mapa disponível</p>
+                                                        ) : (
+                                                            <div className="grid grid-cols-1 gap-1">
+                                                                {availableMapsOptions.map(m => (
+                                                                    <label key={m.id} className="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer transition-colors">
+                                                                        <input 
+                                                                            type="checkbox" 
+                                                                            checked={selectedMapsForRequest.includes(m.id)}
+                                                                            onChange={(e) => {
+                                                                                if (e.target.checked) {
+                                                                                    setSelectedMapsForRequest(prev => [...prev, m.id]);
+                                                                                } else {
+                                                                                    setSelectedMapsForRequest(prev => prev.filter(id => id !== m.id));
+                                                                                }
+                                                                            }}
+                                                                            className="w-3 h-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                                        />
+                                                                        <span className="text-[10px] font-bold text-slate-700 flex items-center gap-2">
+                                                                            <span className="bg-slate-900 text-white w-5 h-5 rounded flex items-center justify-center text-[8px] font-black shrink-0">
+                                                                                {m.number || '?'}
+                                                                            </span>
+                                                                            <span className="truncate">{m.name}</span>
+                                                                        </span>
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={() => handleFulfillRequest(req.id)} 
+                                                            disabled={selectedMapsForRequest.length === 0} 
+                                                            className="flex-1 py-2 bg-emerald-600 text-white font-black text-[10px] rounded-lg disabled:opacity-50"
+                                                        >
+                                                            Confirmar ({selectedMapsForRequest.length})
+                                                        </button>
+                                                        <button onClick={() => { setFulfillingRequestId(null); setSelectedMapsForRequest([]); }} className="px-3 py-2 bg-slate-100 text-slate-500 font-black text-[10px] rounded-lg">Cancelar</button>
+                                                    </div>
                                                 </div>
                                             ) : (
                                                 <div className="flex gap-2 w-full sm:w-auto">
-                                                    <button onClick={() => setFulfillingRequestId(req.id)} className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-wider rounded-lg shadow-sm">Atribuir</button>
+                                                    <button onClick={() => { setFulfillingRequestId(req.id); setSelectedMapsForRequest([]); }} className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-wider rounded-lg shadow-sm">Atribuir</button>
                                                     <button onClick={() => handleReject(req.id)} className="px-4 py-2.5 bg-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-wider rounded-lg">Recusar</button>
                                                 </div>
                                             )}
@@ -264,6 +416,18 @@ const AdminDashboard: React.FC = () => {
                     <div className="space-y-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
                             <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">Territórios</h2>
+                            <div className="flex flex-1 max-w-md relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                                </div>
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar território..." 
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="block w-full pl-10 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                                />
+                            </div>
                             <div className="flex flex-wrap items-center justify-end gap-2">
                                 <div className="relative" ref={filterMenuRef}>
                                     <button onClick={() => setShowFilterMenu(!showFilterMenu)} className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-600 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50">
@@ -286,7 +450,6 @@ const AdminDashboard: React.FC = () => {
                                                         <div className="flex flex-col gap-1 sm:gap-0">
                                                             <button onClick={() => { setFilterStatus('all'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'all' ? 'bg-blue-50 text-blue-700' : ''}`}>Todos</button>
                                                             <button onClick={() => { setFilterStatus('available'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'available' ? 'bg-blue-50 text-blue-700' : ''}`}>Livres</button>
-                                                            <button onClick={() => { setFilterStatus('resting'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'resting' ? 'bg-blue-50 text-blue-700' : ''}`}>Em Descanso</button>
                                                             <button onClick={() => { setFilterStatus('in_use'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'in_use' ? 'bg-blue-50 text-blue-700' : ''}`}>Em Uso</button>
                                                         </div>
                                                     </div>
@@ -306,16 +469,6 @@ const AdminDashboard: React.FC = () => {
                                         </>
                                     )}
                                 </div>
-                                {stats.resting > 0 && (
-                                    <button onClick={() => handleBulkCampaignMode(true)} className="px-4 py-2.5 bg-emerald-100 text-emerald-700 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm border border-emerald-200 hover:bg-emerald-200 transition-colors">
-                                        Liberar Campanha ({stats.resting})
-                                    </button>
-                                )}
-                                {territories.some(t => t.campaignMode) && (
-                                    <button onClick={() => handleBulkCampaignMode(false)} className="px-4 py-2.5 bg-slate-100 text-slate-600 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm border border-slate-200 hover:bg-slate-200 transition-colors">
-                                        Encerrar Campanha
-                                    </button>
-                                )}
                                 <button onClick={() => setShowAddModal(true)} className="px-4 py-2.5 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-md">+ Novo Mapa</button>
                             </div>
                         </div>
@@ -323,7 +476,6 @@ const AdminDashboard: React.FC = () => {
                         {displayTerritories.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {displayTerritories.map(m => {
-                                    const recent = isRecentWork(m.history, m.campaignMode);
                                     const isOverdue = m.status === TerritoryStatus.IN_USE && (getDaysRemaining(m.dueDate) ?? 0) < 0;
 
                                     let borderColor = 'border-slate-200';
@@ -331,65 +483,68 @@ const AdminDashboard: React.FC = () => {
                                         borderColor = 'border-red-300';
                                     } else if (m.status === TerritoryStatus.IN_USE) {
                                         borderColor = 'border-blue-200';
-                                    } else if (recent) {
-                                        borderColor = 'border-amber-200';
                                     } else {
                                         borderColor = 'border-emerald-200';
                                     }
 
                                     return (
-                                        <div key={m.id} className={`bg-white p-5 rounded-2xl border-2 ${borderColor} ${isOverdue ? 'bg-red-50/50' : ''} shadow-sm transition-all duration-300`}>
+                                        <div key={m.id} className={`bg-white p-6 rounded-3xl border-2 ${borderColor} ${isOverdue ? 'bg-red-50/50' : ''} shadow-sm transition-all duration-300 hover:shadow-md`}>
                                             <div className="flex justify-between items-start mb-4">
-                                                <div><h3 className="font-black text-slate-900 text-xl tracking-tight">{m.name}</h3><button onClick={() => setViewingMap(m)} className="text-[9px] text-blue-600 font-black uppercase tracking-widest hover:underline mt-0.5">Ver Documento</button></div>
-                                                {isOverdue ? (
-                                                    <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-md text-[9px] font-black uppercase tracking-wider border border-red-200">Atrasado</span>
-                                                ) : m.status === TerritoryStatus.IN_USE ? (
-                                                    <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-md text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
-                                                ) : recent ? (
-                                                    <span className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-md text-[9px] font-black uppercase tracking-wider border border-amber-100">Descanso</span>
-                                                ) : (
-                                                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-md text-[9px] font-black uppercase tracking-wider border border-emerald-100">Livre</span>
-                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                        {m.number && (
+                                                            <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[11px] font-black tracking-wider shadow-sm">
+                                                                Nº {m.number}
+                                                            </span>
+                                                        )}
+                                                        {isOverdue ? (
+                                                            <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[9px] font-black uppercase tracking-wider border border-red-200">Atrasado</span>
+                                                        ) : m.status === TerritoryStatus.IN_USE ? (
+                                                            <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
+                                                        ) : (
+                                                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-emerald-100">Livre</span>
+                                                        )}
+                                                    </div>
+                                                    <h3 className="font-black text-slate-900 text-2xl tracking-tight leading-tight mb-1">{m.name}</h3>
+                                                    {m.locality && (
+                                                        <div className="flex items-center gap-1.5 text-blue-600">
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                                            <p className="text-xs font-black uppercase tracking-widest truncate">{m.locality}</p>
+                                                        </div>
+                                                    )}
+                                                    <button onClick={() => setViewingMap(m)} className="text-[10px] text-slate-400 font-black uppercase tracking-widest hover:text-blue-600 transition-colors mt-3 flex items-center gap-1">
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                                        Ver Documento
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4 py-3 border-y border-slate-50">
-                                                {m.status === TerritoryStatus.IN_USE ? (
-                                                    <>
+
+                                            {(m.description || m.observation || m.permanentNotes) && (
+                                                <div className="mb-4 p-3 bg-slate-50 rounded-xl space-y-2">
+                                                    {m.description && (
                                                         <div>
-                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Responsável</p>
-                                                            <p className="font-bold text-slate-700 text-xs truncate">{m.assignedToName || '-'}</p>
-                                                            {m.dueDate && <p className={`text-[8px] font-black mt-0.5 uppercase ${isOverdue ? 'text-red-600' : 'text-slate-400'}`}>Expira: {formatDate(m.dueDate)}</p>}
+                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Descrição</p>
+                                                            <p className="text-[10px] font-bold text-slate-600 leading-tight">{m.description}</p>
                                                         </div>
+                                                    )}
+                                                    {m.observation && (
                                                         <div>
-                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Designado em</p>
-                                                            <p className="text-xs font-bold text-slate-600">{formatDate(m.assignmentDate)}</p>
+                                                            <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest leading-none mb-1">Observação</p>
+                                                            <p className="text-[10px] font-bold text-slate-600 leading-tight italic">{m.observation}</p>
                                                         </div>
-                                                    </>
-                                                ) : (
-                                                    <>
+                                                    )}
+                                                    {m.permanentNotes && (
                                                         <div>
-                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Último Responsável</p>
-                                                            <p className="font-bold text-slate-700 text-xs truncate">{m.history?.[0]?.userName || '-'}</p>
+                                                            <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest leading-none mb-1">Notas Permanentes</p>
+                                                            <p className="text-[10px] font-bold text-slate-600 leading-tight">{m.permanentNotes}</p>
                                                         </div>
-                                                        <div>
-                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Devolvido em</p>
-                                                            <p className="text-xs font-bold text-slate-600">{m.history?.[0] ? formatDate(m.history[0].completedDate) : 'Nunca'}</p>
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
-                                            <div className="mt-4 flex justify-end gap-1">
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            <div className="mt-4 flex justify-end gap-1 pt-4 border-t border-slate-50">
                                                 <button onClick={() => setEditingTerritory(m)} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg></button>
                                                 <button onClick={() => setViewHistory(m)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></button>
-                                                {m.status === TerritoryStatus.AVAILABLE && isRecentWork(m.history, false) && !m.campaignMode && (
-                                                    <button onClick={() => handleToggleCampaignMode(m.id, false)} title="Disponibilizar para Campanha" className="p-2 text-slate-400 hover:text-emerald-600 rounded-lg transition-all">
-                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                                    </button>
-                                                )}
-                                                {m.campaignMode && (
-                                                    <button onClick={() => handleToggleCampaignMode(m.id, true)} title="Remover Modo Campanha" className="p-2 text-emerald-600 hover:text-slate-400 rounded-lg transition-all">
-                                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                                    </button>
-                                                )}
                                                 {m.status === TerritoryStatus.IN_USE && (<button onClick={() => handleResetTerritory(m.id)} className="p-2 text-slate-400 hover:text-amber-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg></button>)}
                                                 <button onClick={() => handleDeleteTerritory(m.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                                             </div>
@@ -405,6 +560,103 @@ const AdminDashboard: React.FC = () => {
                         )}
                     </div>
                 </>
+            ) : activeTab === 'assignments' ? (
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between px-2">
+                        <div className="flex flex-col gap-1">
+                            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Atribuições Ativas</h2>
+                            <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100 w-fit">
+                                {territories.filter(t => t.status === TerritoryStatus.IN_USE).length} Mapas em Uso
+                            </span>
+                        </div>
+                        <button 
+                            onClick={() => setShowManualAssignModal(true)}
+                            className="px-6 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl shadow-lg hover:bg-black transition-all"
+                        >
+                            + Nova Atribuição
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-[2rem] border-2 border-slate-100 shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50/50">
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Mapa</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Publicador</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Designado em</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Prazo</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Status</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {territories
+                                        .filter(t => t.status === TerritoryStatus.IN_USE)
+                                        .sort((a, b) => (a.dueDate?.getTime() || 0) - (b.dueDate?.getTime() || 0))
+                                        .map(t => {
+                                            const daysRemaining = getDaysRemaining(t.dueDate);
+                                            const isOverdue = daysRemaining !== null && daysRemaining < 0;
+                                            return (
+                                                <tr key={`assign-${t.id}`} className="hover:bg-slate-50/50 transition-colors group">
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs font-black">{t.number || '?'}</span>
+                                                            <div>
+                                                                <p className="text-sm font-black text-slate-900">{t.name}</p>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.locality}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <p className="text-sm font-bold text-slate-700">{t.assignedToName || 'N/A'}</p>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-sm font-bold text-slate-600">
+                                                        {formatDate(t.assignmentDate)}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <p className={`text-sm font-black ${isOverdue ? 'text-red-600' : 'text-slate-900'}`}>
+                                                            {formatDate(t.dueDate)}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${isOverdue ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                                            {isOverdue ? `Atrasado ${Math.abs(daysRemaining || 0)}d` : `${daysRemaining} dias`}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-1">
+                                                            <button 
+                                                                onClick={() => setEditingAssignment(t)}
+                                                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                                                                title="Editar Datas"
+                                                            >
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleResetTerritory(t.id)}
+                                                                className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
+                                                                title="Retomar Território"
+                                                            >
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    {territories.filter(t => t.status === TerritoryStatus.IN_USE).length === 0 && (
+                                        <tr>
+                                            <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-bold">
+                                                Nenhuma atribuição ativa no momento.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             ) : activeTab === 'users' ? (
                 <div className="space-y-4">
                     <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] px-2">Gestão de Usuários</h2>
@@ -418,7 +670,7 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 </div>
             ) : (
-                <AssignmentsReport territories={territories} />
+                <AssignmentsReport territories={territories} users={users} />
             )}
         </div>
     );

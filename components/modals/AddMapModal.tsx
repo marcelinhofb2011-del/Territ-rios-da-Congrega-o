@@ -3,6 +3,11 @@ import { uploadTerritory, createTerritory } from '../../services/api';
 
 const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ onClose, onAdded }) => {
     const [name, setName] = useState('');
+    const [number, setNumber] = useState('');
+    const [locality, setLocality] = useState('');
+    const [description, setDescription] = useState('');
+    const [observation, setObservation] = useState('');
+    const [permanentNotes, setPermanentNotes] = useState('');
     const [file, setFile] = useState<File | null>(null);
     const [link, setLink] = useState('');
     const [mode, setMode] = useState<'file' | 'link'>('file');
@@ -17,10 +22,10 @@ const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ 
             if (!name.trim()) throw new Error("O nome do mapa é obrigatório.");
             if (mode === 'file') {
                 if (!file) throw new Error("Selecione um arquivo (PDF ou Imagem).");
-                await uploadTerritory(name, file);
+                await uploadTerritory(name, file, number, locality, description, observation, permanentNotes);
             } else {
                 if (!link) throw new Error("Insira o link do mapa.");
-                await createTerritory(name, link);
+                await createTerritory(name, link, number, locality, description, observation, permanentNotes);
             }
             onAdded();
             onClose();
@@ -33,13 +38,40 @@ const AddMapModal: React.FC<{ onClose: () => void; onAdded: () => void; }> = ({ 
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
                 <h2 className="text-2xl font-black mb-6 text-gray-800">Novo Território</h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl">{error}</p>}
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Nome do Mapa</label>
+                            <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-black text-gray-900" placeholder="Ex: Território 05" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Número</label>
+                            <input type="text" value={number} onChange={e => setNumber(e.target.value)} className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-black text-gray-900" placeholder="Ex: 05" />
+                        </div>
+                    </div>
+
                     <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Nome/Número do Mapa</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-black text-gray-900" placeholder="Ex: Território 05" />
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Localidade</label>
+                        <input type="text" value={locality} onChange={e => setLocality(e.target.value)} className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-gray-900" placeholder="Ex: Bairro Centro" />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Descrição</label>
+                        <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-gray-900" placeholder="Ex: Ruas A, B e C" />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Observação Importante</label>
+                        <textarea value={observation} onChange={e => setObservation(e.target.value)} rows={2} className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-gray-900" placeholder="Ex: Cuidado com cães na rua X" />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Notas Permanentes (Visível p/ todos)</label>
+                        <textarea value={permanentNotes} onChange={e => setPermanentNotes(e.target.value)} rows={2} className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-gray-900" placeholder="Ex: Não bater na casa 123 a pedido do morador." />
                     </div>
                     
                     <div className="flex p-1 bg-gray-100 rounded-xl">

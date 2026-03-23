@@ -7,16 +7,22 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && (
+        request.auth.token.email == "marcelinhofb2011@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
     }
 
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow list: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && (isAdmin() || (request.auth.uid == userId && request.resource.data.role == resource.data.role));
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.token.email == "marcelinhofb2011@gmail.com" ||
+        (request.auth.uid == userId && request.resource.data.role == resource.data.role)
+      );
     }
 
     match /territories/{territoryId} {

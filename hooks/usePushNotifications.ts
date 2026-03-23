@@ -19,7 +19,7 @@ export const usePushNotifications = (user: User | null) => {
                     // Get token
                     // Note: You need to provide your VAPID key here
                     const token = await getToken(messagingInstance, {
-                        vapidKey: process.env.VITE_VAPID_KEY
+                        vapidKey: (import.meta as any).env.VITE_VAPID_KEY
                     });
 
                     if (token) {
@@ -29,10 +29,12 @@ export const usePushNotifications = (user: User | null) => {
                 }
 
                 // Handle foreground messages
-                onMessage(messagingInstance, (payload) => {
-                    console.log('Message received in foreground: ', payload);
-                    // You can show a custom toast here if you want
-                });
+                if (messagingInstance) {
+                    onMessage(messagingInstance, (payload) => {
+                        console.log('Message received in foreground: ', payload);
+                        // You can show a custom toast here if you want
+                    });
+                }
 
             } catch (error) {
                 console.error('Error setting up push notifications:', error);

@@ -20,7 +20,10 @@ const ReportModal: React.FC<{ territory: Territory; onClose: () => void; onSubmi
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
             <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl">
-                <h2 className="text-2xl font-black mb-2 text-gray-800">Concluir {territory.name}</h2>
+                <h2 className="text-2xl font-black mb-2 text-gray-800">
+                    {territory.number && <span className="mr-2 px-2 py-1 bg-slate-900 text-white rounded-lg text-xs">Nº {territory.number}</span>}
+                    Concluir {territory.name}
+                </h2>
                 <p className="text-gray-500 mb-6 font-medium">Relate os pontos principais do trabalho realizado.</p>
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
