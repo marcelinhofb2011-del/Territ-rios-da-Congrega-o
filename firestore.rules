@@ -60,9 +60,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email != null && request.auth.token.email.lower() == "marcelinhofb2011@gmail.com") ||
+        (request.auth.token.email != null && request.auth.token.email == "marcelinhofb2011@gmail.com") ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin')
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
@@ -86,43 +86,63 @@ service cloud.firestore {
       return url is string && (url.matches("^https://.*") || url.matches("^http://.*") || url.matches("^gs://.*") || url.matches("^data:.*"));
     }
 
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function isValidList(list, maxSize) {
+      return list is list && list.size() <= maxSize;
+    }
+
     // ===============================================================
     // Domain Validators
     // ===============================================================
 
     function isValidUser(data) {
       return hasRequiredFields(['uid', 'email', 'name', 'role', 'active', 'createdAt']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'name', 'role', 'active', 'createdAt', 'fcmTokens', 'id']) &&
              data.uid is string &&
              data.email is string && isValidEmail(data.email) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.role in ['admin', 'user', 'publisher'] &&
              data.active is bool &&
-             data.createdAt is timestamp;
+             data.createdAt is timestamp &&
+             (!('fcmTokens' in data) || isValidList(data.fcmTokens, 10));
     }
 
     function isValidTerritory(data) {
       return hasRequiredFields(['name', 'number', 'locality', 'description', 'observation', 'status', 'pdfUrl', 'createdAt', 'history']) &&
+             hasOnlyAllowedFields(['name', 'number', 'locality', 'description', 'observation', 'status', 'pdfUrl', 'createdAt', 'history', 'assignedTo', 'assignedToName', 'assignmentDate', 'dueDate', 'lastCompletedDate', 'permanentNotes', 'workedOn', 'assignmentOrder', 'id']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.number is string && data.number.size() > 0 &&
              data.locality is string && data.locality.size() > 0 &&
-             data.description is string &&
-             data.observation is string &&
+             data.description is string && data.description.size() < 1000 &&
+             data.observation is string && data.observation.size() < 1000 &&
              data.status in ['disponivel', 'solicitado', 'em_uso', 'fechado'] &&
              data.pdfUrl is string && isValidUrl(data.pdfUrl) &&
              data.createdAt is timestamp &&
-             data.history is list;
+             isValidList(data.history, 100) &&
+             (!('permanentNotes' in data) || (data.permanentNotes is string && data.permanentNotes.size() < 2000)) &&
+             (!('workedOn' in data) || data.workedOn is bool) &&
+             (!('assignmentOrder' in data) || data.assignmentOrder is number);
     }
 
     function isValidRequest(data) {
       return hasRequiredFields(['userId', 'userName', 'requestDate', 'status']) &&
+             hasOnlyAllowedFields(['userId', 'userName', 'requestDate', 'status']) &&
              data.userId is string &&
-             data.userName is string && data.userName.size() > 0 &&
+             data.userName is string && data.userName.size() > 0 && data.userName.size() < 100 &&
              data.requestDate is timestamp &&
              data.status in ['pendente', 'aprovado', 'rejeitado'];
     }
 
     function isValidNotification(data) {
       return hasRequiredFields(['userId', 'message', 'type', 'read', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'message', 'type', 'read', 'createdAt']) &&
              data.userId is string &&
              data.message is string && data.message.size() > 0 && data.message.size() < 500 &&
              data.type in ['info', 'success', 'warning'] &&
@@ -136,32 +156,42 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow delete: if isAdmin() || (isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == "marcelinhofb2011@gmail.com");
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(request.resource.data) && request.resource.data.role == 'user' && uidUnchanged();
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && request.resource.data.role == resource.data.role && isValidUser(request.resource.data) && uidNotModified()) || 
+        isAdmin()
+      );
+      allow delete: if isAdmin();
     }
 
     match /territories/{territoryId} {
       allow read: if isSignedIn();
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (isSignedIn() && resource.data.assignedTo == request.auth.uid);
+      allow create: if isAdmin() && isValidTerritory(request.resource.data);
+      allow delete: if isAdmin();
+      allow update: if (isAdmin() && isValidTerritory(request.resource.data)) || (
+        isSignedIn() && 
+        resource.data.assignedTo == request.auth.uid && 
+        isValidTerritory(request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['workedOn', 'history', 'status', 'assignedTo', 'assignedToName', 'assignmentDate', 'dueDate', 'lastCompletedDate'])
+      );
     }
 
     match /requests/{requestId} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && isValidRequest(request.resource.data);
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() && isValidRequest(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn(); 
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create: if isAdmin() && isValidNotification(request.resource.data);
     }
 
     match /test/{docId} {
-      allow read: if true;
+      allow read: if isSignedIn();
     }
   }
 }

@@ -439,9 +439,33 @@ const PublisherDashboard: React.FC = () => {
                                                 <svg className="w-12 h-12 text-amber-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
                                             </div>
                                             <h4 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-700 mb-3">
-                                                Observações Importantes
+                                                Notas Permanentes
                                             </h4>
                                             <p className="text-amber-900 text-sm font-bold leading-relaxed">{territory.permanentNotes}</p>
+                                        </div>
+                                    )}
+
+                                    {territory.history && territory.history.length > 0 && territory.history.some(h => h.notes) && (
+                                        <div className="mb-8 p-6 bg-blue-50/30 border border-blue-100/50 rounded-[2rem]">
+                                            <h4 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600 mb-4">
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                Últimas Observações
+                                            </h4>
+                                            <div className="space-y-3">
+                                                {territory.history
+                                                    .filter(h => h.notes)
+                                                    .slice(-2)
+                                                    .reverse()
+                                                    .map((h, i) => (
+                                                        <div key={i} className="bg-white/60 p-4 rounded-2xl border border-blue-50">
+                                                            <div className="flex justify-between items-center mb-1">
+                                                                <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest">{h.publisherName}</p>
+                                                                <p className="text-[9px] font-bold text-slate-400">{formatDate(h.date)}</p>
+                                                            </div>
+                                                            <p className="text-slate-700 text-xs font-bold italic leading-relaxed">"{h.notes}"</p>
+                                                        </div>
+                                                    ))}
+                                            </div>
                                         </div>
                                     )}
 

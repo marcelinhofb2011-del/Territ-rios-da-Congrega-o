@@ -362,9 +362,28 @@ export const createTerritory = async (
     permanentNotes: string = ''
 ): Promise<void> => {
     try {
+        const trimmedName = name.trim();
+        const trimmedNumber = number.trim();
+
+        // Check for existing territory with same name
+        const qName = query(collection(db, 'territories'), where('name', '==', trimmedName));
+        const snapshotName = await getDocs(qName);
+        if (!snapshotName.empty) {
+            throw new Error(`Já existe um território com o nome "${trimmedName}".`);
+        }
+        
+        // Check for existing territory with same number (if provided)
+        if (trimmedNumber) {
+            const qNum = query(collection(db, 'territories'), where('number', '==', trimmedNumber));
+            const snapshotNum = await getDocs(qNum);
+            if (!snapshotNum.empty) {
+                throw new Error(`Já existe um território com o número "${trimmedNumber}".`);
+            }
+        }
+
         const newTerritory = {
-            name: name.trim(),
-            number: number.trim(),
+            name: trimmedName,
+            number: trimmedNumber,
             locality: locality.trim(),
             description: description.trim(),
             observation: observation.trim(),
@@ -785,10 +804,33 @@ export const manualAssignTerritories = async (userId: string, userName: string, 
 export const updateAssignmentDates = async (territoryId: string, assignmentDate: Date, dueDate: Date): Promise<void> => {
     const territoryRef = doc(db, 'territories', territoryId);
     try {
+        const tDoc = await getDoc(territoryRef);
+        if (!tDoc.exists()) return;
+        const tData = tDoc.data();
+
         await updateDoc(territoryRef, {
             assignmentDate: Timestamp.fromDate(assignmentDate),
             dueDate: Timestamp.fromDate(dueDate)
         });
+
+        if (tData.assignedTo) {
+            // Create a notification
+            const notifRef = doc(collection(db, 'notifications'));
+            await setDoc(notifRef, {
+                userId: tData.assignedTo,
+                message: `As datas do território ${tData.name} foram atualizadas.`,
+                type: 'info',
+                read: false,
+                createdAt: Timestamp.now()
+            });
+
+            // Trigger push notification
+            sendPushNotification(
+                tData.assignedTo, 
+                "Datas Atualizadas 📅", 
+                `A data de entrega do território ${tData.name} foi alterada.`
+            );
+        }
     } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `territories/${territoryId}`);
     }
@@ -796,7 +838,30 @@ export const updateAssignmentDates = async (territoryId: string, assignmentDate:
 
 export const rejectRequest = async (requestId: string): Promise<void> => {
     try {
-        await updateDoc(doc(db, 'requests', requestId), { status: RequestStatus.REJECTED });
+        const requestRef = doc(db, 'requests', requestId);
+        const requestDoc = await getDoc(requestRef);
+        
+        if (!requestDoc.exists()) return;
+        const reqData = requestDoc.data();
+
+        await updateDoc(requestRef, { status: RequestStatus.REJECTED });
+
+        // Create a notification
+        const notifRef = doc(collection(db, 'notifications'));
+        await setDoc(notifRef, {
+            userId: reqData.userId,
+            message: `Sua solicitação de território foi recusada.`,
+            type: 'warning',
+            read: false,
+            createdAt: Timestamp.now()
+        });
+
+        // Trigger push notification
+        sendPushNotification(
+            reqData.userId, 
+            "Solicitação Recusada ❌", 
+            "Infelizmente sua solicitação de território não pôde ser atendida no momento."
+        );
     } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `requests/${requestId}`);
     }

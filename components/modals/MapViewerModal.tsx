@@ -160,6 +160,31 @@ const MapViewerModal: React.FC<{ url: string; name: string; number?: string; onC
             document.exitFullscreen();
         }
     };
+
+    const handleDownload = async () => {
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            
+            // Try to determine extension
+            let extension = 'png';
+            if (isPdf) extension = 'pdf';
+            else if (url.includes('jpg') || url.includes('jpeg')) extension = 'jpg';
+            
+            link.download = `Mapa_${name.replace(/\s+/g, '_')}.${extension}`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+            console.error('Erro ao baixar mapa:', error);
+            // Fallback: open in new tab
+            window.open(url, '_blank');
+        }
+    };
     
     useEffect(() => {
         const onFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -184,6 +209,13 @@ const MapViewerModal: React.FC<{ url: string; name: string; number?: string; onC
                         </h2>
                     </div>
                     <div className="flex items-center gap-3">
+                         <button 
+                            onClick={handleDownload}
+                            className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" 
+                            title="Baixar Mapa"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        </button>
                          <button 
                             onClick={toggleFullscreen}
                             className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-all" 

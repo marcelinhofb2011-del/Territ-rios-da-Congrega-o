@@ -17,6 +17,10 @@ import ManualAssignmentModal from './modals/ManualAssignmentModal';
 import EditAssignmentDatesModal from './modals/EditAssignmentDatesModal';
 import AssignmentsReport from './AssignmentsReport';
 import { useAuth } from '../hooks/useAuth';
+import { 
+    PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, 
+    BarChart, Bar, XAxis, YAxis, CartesianGrid 
+} from 'recharts';
 
 const FilterIcon: React.FC = () => (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -30,7 +34,7 @@ const AdminDashboard: React.FC = () => {
     const [requests, setRequests] = useState<TerritoryRequest[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'territories' | 'users' | 'reports'>('territories');
+    const [activeTab, setActiveTab] = useState<'territories' | 'users' | 'reports' | 'assignments' | 'stats'>('territories');
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingTerritory, setEditingTerritory] = useState<Territory | null>(null);
@@ -48,6 +52,40 @@ const AdminDashboard: React.FC = () => {
         loading?: boolean;
     } | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    // Statistics Data
+    const statsData = useMemo(() => {
+        const total = territories.length;
+        const available = territories.filter(t => t.status === TerritoryStatus.AVAILABLE).length;
+        const inUse = territories.filter(t => t.status === TerritoryStatus.IN_USE).length;
+        const requested = territories.filter(t => t.status === TerritoryStatus.REQUESTED).length;
+        const closed = territories.filter(t => t.status === TerritoryStatus.CLOSED).length;
+
+        const pieData = [
+            { name: 'Disponíveis', value: available, color: '#10b981' }, // emerald-500
+            { name: 'Em Uso', value: inUse, color: '#3b82f6' }, // blue-500
+            { name: 'Solicitados', value: requested, color: '#f59e0b' }, // amber-500
+            { name: 'Fechados', value: closed, color: '#ef4444' } // red-500
+        ].filter(d => d.value > 0);
+
+        // Group by locality for bar chart
+        const localityMap = new Map<string, { name: string, total: number, inUse: number }>();
+        territories.forEach(t => {
+            const loc = t.locality || 'Outros';
+            if (!localityMap.has(loc)) {
+                localityMap.set(loc, { name: loc, total: 0, inUse: 0 });
+            }
+            const stats = localityMap.get(loc)!;
+            stats.total++;
+            if (t.status === TerritoryStatus.IN_USE) stats.inUse++;
+        });
+
+        const barData = Array.from(localityMap.values())
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 8);
+
+        return { total, available, inUse, requested, closed, pieData, barData };
+    }, [territories]);
 
     // Filter and Sort States
     const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'in_use'>('all');
@@ -289,11 +327,38 @@ const AdminDashboard: React.FC = () => {
         return processed;
     }, [territories, filterStatus, sortBy]);
 
-    const stats = useMemo(() => ({
-        total: territories.length,
-        available: territories.filter(t => t.status === TerritoryStatus.AVAILABLE).length,
-        inUse: territories.filter(t => t.status === TerritoryStatus.IN_USE).length,
-    }), [territories]);
+    const stats = useMemo(() => {
+        const total = territories.length;
+        const available = territories.filter(t => t.status === TerritoryStatus.AVAILABLE).length;
+        const inUse = territories.filter(t => t.status === TerritoryStatus.IN_USE).length;
+        const requested = territories.filter(t => t.status === TerritoryStatus.REQUESTED).length;
+        const closed = territories.filter(t => t.status === TerritoryStatus.CLOSED).length;
+
+        const pieData = [
+            { name: 'Disponíveis', value: available, color: '#10b981' }, // emerald-500
+            { name: 'Em Uso', value: inUse, color: '#3b82f6' }, // blue-500
+            { name: 'Solicitados', value: requested, color: '#f59e0b' }, // amber-500
+            { name: 'Fechados', value: closed, color: '#ef4444' } // red-500
+        ].filter(d => d.value > 0);
+
+        // Group by locality for bar chart
+        const localityMap = new Map<string, { name: string, total: number, inUse: number }>();
+        territories.forEach(t => {
+            const loc = t.locality || 'Outros';
+            if (!localityMap.has(loc)) {
+                localityMap.set(loc, { name: loc, total: 0, inUse: 0 });
+            }
+            const stats = localityMap.get(loc)!;
+            stats.total++;
+            if (t.status === TerritoryStatus.IN_USE) stats.inUse++;
+        });
+
+        const barData = Array.from(localityMap.values())
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 8);
+
+        return { total, available, inUse, requested, closed, pieData, barData };
+    }, [territories]);
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center p-20 space-y-4">
@@ -337,9 +402,89 @@ const AdminDashboard: React.FC = () => {
                     <button onClick={() => setActiveTab('territories')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'territories' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Mapas</button>
                     <button onClick={() => setActiveTab('assignments')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Atribuições</button>
                     <button onClick={() => setActiveTab('users')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Usuários</button>
+                    <button onClick={() => setActiveTab('stats')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'stats' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Estatísticas</button>
                     <button onClick={() => setActiveTab('reports')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'reports' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Relatórios</button>
                 </div>
             </div>
+
+            {activeTab === 'stats' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Pie Chart: Status Distribution */}
+                        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100">
+                            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Distribuição por Status</h3>
+                            <div className="h-64 w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={stats.pieData}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                        >
+                                            {stats.pieData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip 
+                                            contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                            itemStyle={{ fontWeight: 'bold', fontSize: '12px' }}
+                                        />
+                                        <Legend verticalAlign="bottom" height={36}/>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        {/* Bar Chart: Localities */}
+                        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100">
+                            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Top Localidades</h3>
+                            <div className="h-64 w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={stats.barData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis 
+                                            dataKey="name" 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                        />
+                                        <YAxis 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                        />
+                                        <Tooltip 
+                                            cursor={{ fill: '#f8fafc' }}
+                                            contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                        />
+                                        <Bar dataKey="total" name="Total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="inUse" name="Em Uso" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Detailed Stats Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {[
+                            { label: 'Total', value: stats.total, color: 'text-slate-900', bg: 'bg-slate-50' },
+                            { label: 'Livres', value: stats.available, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                            { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600', bg: 'bg-blue-50' },
+                            { label: 'Solicitados', value: stats.requested, color: 'text-amber-600', bg: 'bg-amber-50' }
+                        ].map(s => (
+                            <div key={s.label} className={`${s.bg} p-6 rounded-3xl border border-white/50`}>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.label}</p>
+                                <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {activeTab === 'territories' ? (
                 <>
@@ -539,6 +684,27 @@ const AdminDashboard: React.FC = () => {
                                                             <p className="text-[10px] font-bold text-slate-600 leading-tight">{m.permanentNotes}</p>
                                                         </div>
                                                     )}
+                                                </div>
+                                            )}
+
+                                            {m.history && m.history.length > 0 && m.history.some(h => h.notes) && (
+                                                <div className="mb-4 p-3 bg-blue-50/30 rounded-xl border border-blue-100/50">
+                                                    <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Últimas Observações</p>
+                                                    <div className="space-y-2">
+                                                        {m.history
+                                                            .filter(h => h.notes)
+                                                            .slice(-2)
+                                                            .reverse()
+                                                            .map((h, i) => (
+                                                                <div key={i} className="bg-white/60 p-2 rounded-lg border border-blue-50">
+                                                                    <div className="flex justify-between items-center mb-1">
+                                                                        <span className="text-[9px] font-black text-slate-900">{h.userName}</span>
+                                                                        <span className="text-[8px] font-bold text-slate-400">{formatDate(h.returnDate)}</span>
+                                                                    </div>
+                                                                    <p className="text-[10px] text-slate-600 font-medium leading-tight italic">"{h.notes}"</p>
+                                                                </div>
+                                                            ))}
+                                                    </div>
                                                 </div>
                                             )}
 
