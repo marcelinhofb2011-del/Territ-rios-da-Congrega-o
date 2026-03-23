@@ -26,5 +26,4 @@ dist-ssr
 # AI Studio / Platform specific
 .gemini
 migrated_prompt_history
-supabase
 .env
