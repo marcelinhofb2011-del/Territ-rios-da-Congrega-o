@@ -191,7 +191,7 @@ service cloud.firestore {
     }
 
     match /test/{docId} {
-      allow read: if isSignedIn();
+      allow read: if true;
     }
   }
 }

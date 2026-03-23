@@ -129,6 +129,7 @@ const AdminDashboard: React.FC = () => {
                     createdAt: parseDate(data.createdAt) || new Date(),
                     assignmentDate: parseDate(data.assignmentDate),
                     dueDate: parseDate(data.dueDate),
+                    lastCompletedDate: parseDate(data.lastCompletedDate),
                     history: history
                 } as Territory;
             });
