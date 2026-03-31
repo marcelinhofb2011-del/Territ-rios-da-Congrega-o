@@ -3,7 +3,9 @@ import {
     createUserWithEmailAndPassword, 
     signOut,
     updateProfile,
-    sendPasswordResetEmail
+    sendPasswordResetEmail,
+    GoogleAuthProvider,
+    signInWithPopup
 } from 'firebase/auth';
 import { 
     doc, 
@@ -223,6 +225,23 @@ export const apiLogin = async (email: string, pass: string): Promise<User> => {
             throw new Error("Muitas tentativas sem sucesso. Tente novamente mais tarde.");
         }
         throw new Error("Erro ao acessar o sistema. Tente novamente.");
+    }
+};
+
+export const apiLoginWithGoogle = async (): Promise<User> => {
+    try {
+        const provider = new GoogleAuthProvider();
+        const userCredential = await signInWithPopup(auth, provider);
+        return await getOrCreateUserProfile(userCredential.user);
+    } catch (error: any) {
+        console.error("Erro no apiLoginWithGoogle:", error);
+        if (error.code === 'auth/popup-blocked') {
+            throw new Error("O popup foi bloqueado pelo navegador. Por favor, permita popups para este site.");
+        }
+        if (error.code === 'auth/cancelled-popup-request') {
+            throw new Error("A autenticação foi cancelada.");
+        }
+        throw new Error("Erro ao entrar com Google. Tente novamente.");
     }
 };
 
@@ -905,6 +924,41 @@ export const submitReport = async (user: User, territoryId: string, notes: strin
                 assignmentDate: null,
                 dueDate: null,
                 lastCompletedDate: Timestamp.now(),
+                workedOn: false,
+                history: [...currentHistory, historyEntry]
+            });
+        });
+    } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `territories/${territoryId}`);
+    }
+};
+
+export const reversalTerritory = async (user: User, territoryId: string): Promise<void> => {
+    const territoryRef = doc(db, 'territories', territoryId);
+    
+    try {
+        await runTransaction(db, async (transaction) => {
+            const territoryDoc = await transaction.get(territoryRef);
+            if (!territoryDoc.exists()) throw new Error("Território não encontrado.");
+            
+            const territoryData = territoryDoc.data();
+            
+            const historyEntry = {
+                userId: user.id,
+                userName: user.name,
+                assignmentDate: territoryData.assignmentDate || Timestamp.now(),
+                completedDate: Timestamp.now(),
+                notes: "Extorno: Mapa devolvido sem ser trabalhado."
+            };
+            
+            const currentHistory = territoryData.history || [];
+
+            transaction.update(territoryRef, {
+                status: TerritoryStatus.AVAILABLE,
+                assignedTo: null,
+                assignedToName: null,
+                assignmentDate: null,
+                dueDate: null,
                 workedOn: false,
                 history: [...currentHistory, historyEntry]
             });

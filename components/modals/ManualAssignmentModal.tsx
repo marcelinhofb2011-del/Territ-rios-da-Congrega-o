@@ -7,10 +7,11 @@ interface ManualAssignmentModalProps {
     users: User[];
     onClose: () => void;
     onSuccess: () => void;
+    initialUserId?: string;
 }
 
-const ManualAssignmentModal: React.FC<ManualAssignmentModalProps> = ({ territories, users, onClose, onSuccess }) => {
-    const [selectedUserId, setSelectedUserId] = useState('');
+const ManualAssignmentModal: React.FC<ManualAssignmentModalProps> = ({ territories, users, onClose, onSuccess, initialUserId }) => {
+    const [selectedUserId, setSelectedUserId] = useState(initialUserId || '');
     const [selectedTerritoryIds, setSelectedTerritoryIds] = useState<string[]>([]);
     const [assignmentDate, setAssignmentDate] = useState(new Date().toISOString().split('T')[0]);
     const [dueDate, setDueDate] = useState(() => {
@@ -38,10 +39,21 @@ const ManualAssignmentModal: React.FC<ManualAssignmentModalProps> = ({ territori
             const selectedUser = users.find(u => u.id === selectedUserId);
             if (!selectedUser) throw new Error("Usuário não encontrado.");
 
+            // Sort selected territory IDs by their territory number to ensure they are assigned in order
+            const sortedTerritoryIds = [...selectedTerritoryIds].sort((a, b) => {
+                const tA = territories.find(t => t.id === a);
+                const tB = territories.find(t => t.id === b);
+                if (!tA || !tB) return 0;
+                const numA = parseInt(tA.number) || 0;
+                const numB = parseInt(tB.number) || 0;
+                if (numA !== numB) return numA - numB;
+                return (tA.number || '').localeCompare(tB.number || '', undefined, { numeric: true });
+            });
+
             await manualAssignTerritories(
                 selectedUserId,
                 selectedUser.name,
-                selectedTerritoryIds,
+                sortedTerritoryIds,
                 new Date(assignmentDate + 'T12:00:00'),
                 new Date(dueDate + 'T12:00:00')
             );

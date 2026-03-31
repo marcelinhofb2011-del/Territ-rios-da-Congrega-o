@@ -157,7 +157,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
-      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(request.resource.data) && request.resource.data.role == 'user' && uidUnchanged();
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(request.resource.data) && 
+                    (request.resource.data.role == 'user' || (request.auth.token.email == "marcelinhofb2011@gmail.com" && request.resource.data.role == 'admin')) && 
+                    uidUnchanged();
       allow update: if isSignedIn() && (
         (request.auth.uid == userId && request.resource.data.role == resource.data.role && isValidUser(request.resource.data) && uidNotModified()) || 
         isAdmin()

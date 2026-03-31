@@ -21,6 +21,9 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid 
 } from 'recharts';
 
+import Sidebar from './Sidebar';
+import TerritoryCard from './TerritoryCard';
+
 const FilterIcon: React.FC = () => (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 4h18M7 12h10m-7 8h4"></path>
@@ -33,12 +36,32 @@ const AdminDashboard: React.FC = () => {
     const [requests, setRequests] = useState<TerritoryRequest[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'territories' | 'worked' | 'users' | 'stats'>('territories');
-    const [searchTerm, setSearchTerm] = useState('');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'territories' | 'worked' | 'users' | 'stats'>('dashboard');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingTerritory, setEditingTerritory] = useState<Territory | null>(null);
     const [viewHistory, setViewHistory] = useState<Territory | null>(null);
     const [viewingMap, setViewingMap] = useState<Territory | null>(null);
+
+    const globalHistory = useMemo(() => {
+        const allHistory: any[] = [];
+        territories.forEach(t => {
+            if (t.history && Array.isArray(t.history)) {
+                t.history.forEach(h => {
+                    allHistory.push({
+                        ...h,
+                        territoryNumber: t.number,
+                        territoryName: t.name
+                    });
+                });
+            }
+        });
+        return allHistory.sort((a, b) => {
+            const dateA = (a.completedDate as any)?.toDate?.() || (a.completedDate instanceof Date ? a.completedDate : new Date(0));
+            const dateB = (b.completedDate as any)?.toDate?.() || (b.completedDate instanceof Date ? b.completedDate : new Date(0));
+            return dateB.getTime() - dateA.getTime();
+        });
+    }, [territories]);
     const [fulfillingRequestId, setFulfillingRequestId] = useState<string | null>(null);
     const [requestDueDate, setRequestDueDate] = useState<string>(() => {
         const d = new Date();
@@ -47,6 +70,7 @@ const AdminDashboard: React.FC = () => {
     });
     const [selectedMapsForRequest, setSelectedMapsForRequest] = useState<string[]>([]);
     const [showManualAssignModal, setShowManualAssignModal] = useState(false);
+    const [manualAssignUserId, setManualAssignUserId] = useState<string | undefined>(undefined);
     const [editingAssignment, setEditingAssignment] = useState<Territory | null>(null);
     const [confirmAction, setConfirmAction] = useState<{
         title: string;
@@ -58,7 +82,7 @@ const AdminDashboard: React.FC = () => {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     // Statistics Data
-    const statsData = useMemo(() => {
+    const stats = useMemo(() => {
         const total = territories.length;
         const available = territories.filter(t => t.status === TerritoryStatus.AVAILABLE).length;
         const inUse = territories.filter(t => t.status === TerritoryStatus.IN_USE).length;
@@ -92,23 +116,7 @@ const AdminDashboard: React.FC = () => {
     }, [territories]);
 
     // Filter and Sort States
-    const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'in_use'>('all');
     const [sortBy, setSortBy] = useState<'default' | 'name' | 'oldest' | 'newest'>('default');
-    const [showFilterMenu, setShowFilterMenu] = useState(false);
-    const filterMenuRef = useRef<HTMLDivElement>(null);
-
-    // Close dropdown on outside click
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
-                setShowFilterMenu(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, []);
 
     // Listeners for realtime data
     useEffect(() => {
@@ -279,123 +287,16 @@ const AdminDashboard: React.FC = () => {
             }
         });
     };
-    const renderTerritoryCard = (m: Territory) => {
-        const isOverdue = m.dueDate && m.dueDate < new Date();
-        let borderColor = 'border-slate-200';
-        if (isOverdue) {
-            borderColor = 'border-red-200';
-        } else if (m.status === TerritoryStatus.IN_USE) {
-            borderColor = 'border-blue-200';
-        } else {
-            borderColor = 'border-emerald-200';
-        }
-
-        return (
-            <div key={m.id} className={`bg-white p-6 rounded-3xl border-2 ${borderColor} ${isOverdue ? 'bg-red-50/50' : ''} shadow-sm transition-all duration-300 hover:shadow-md`}>
-                <div className="flex justify-between items-start mb-4">
-                    <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                            {m.number && (
-                                <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[11px] font-black tracking-wider shadow-sm">
-                                    Nº {m.number}
-                                </span>
-                            )}
-                            {isOverdue ? (
-                                <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[9px] font-black uppercase tracking-wider border border-red-200">Atrasado</span>
-                            ) : m.status === TerritoryStatus.IN_USE ? (
-                                <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
-                            ) : (
-                                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-emerald-100">Livre</span>
-                            )}
-                        </div>
-                        <h3 className="font-black text-slate-900 text-2xl tracking-tight leading-tight mb-1">{m.name}</h3>
-                        {m.status === TerritoryStatus.AVAILABLE && m.lastCompletedDate && (
-                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">
-                                Devolvido em {formatDate(m.lastCompletedDate)}
-                            </p>
-                        )}
-                        {m.locality && (
-                            <div className="flex items-center gap-1.5 text-blue-600">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                <p className="text-xs font-black uppercase tracking-widest truncate">{m.locality}</p>
-                            </div>
-                        )}
-                        <button onClick={() => window.open(m.pdfUrl, '_blank')} className="text-[10px] text-slate-400 font-black uppercase tracking-widest hover:text-blue-600 transition-colors mt-3 flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                            Ver Documento
-                        </button>
-                    </div>
-                </div>
-
-                {(m.description || m.observation || m.permanentNotes) && (
-                    <div className="mb-4 p-3 bg-slate-50 rounded-xl space-y-2">
-                        {m.description && (
-                            <div>
-                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Descrição</p>
-                                <p className="text-[10px] font-bold text-slate-600 leading-tight">{m.description}</p>
-                            </div>
-                        )}
-                        {m.observation && (
-                            <div>
-                                <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest leading-none mb-1">Observação</p>
-                                <p className="text-[10px] font-bold text-slate-600 leading-tight italic">{m.observation}</p>
-                            </div>
-                        )}
-                        {m.permanentNotes && (
-                            <div>
-                                <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest leading-none mb-1">Notas Permanentes</p>
-                                <p className="text-[10px] font-bold text-slate-600 leading-tight">{m.permanentNotes}</p>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {m.history && m.history.length > 0 && (
-                    <div className="mb-4 p-3 bg-blue-50/30 rounded-xl border border-blue-100/50">
-                        <p className="text-[8px] font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Última Atividade</p>
-                        <div className="space-y-2">
-                            {m.history
-                                .slice(0, 1)
-                                .map((h, i) => (
-                                    <div key={i} className="bg-white/60 p-2 rounded-lg border border-blue-50">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <span className="text-[9px] font-black text-slate-900">{h.userName}</span>
-                                            <span className="text-[8px] font-bold text-slate-400">{formatDate(h.completedDate)}</span>
-                                        </div>
-                                        {h.notes ? (
-                                            <p className="text-[10px] text-slate-600 font-medium leading-tight italic">"{h.notes}"</p>
-                                        ) : (
-                                            <p className="text-[10px] text-slate-400 font-medium leading-tight italic">Devolvido sem observações.</p>
-                                        )}
-                                    </div>
-                                ))}
-                        </div>
-                    </div>
-                )}
-
-                <div className="mt-4 flex justify-end gap-1 pt-4 border-t border-slate-50">
-                    <button onClick={() => setEditingTerritory(m)} title="Editar" className="p-2 text-slate-400 hover:text-blue-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg></button>
-                    <button onClick={() => setViewHistory(m)} title="Histórico" className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></button>
-                    {m.status === TerritoryStatus.IN_USE && (<button onClick={() => handleResetTerritory(m.id)} title="Retomar" className="p-2 text-slate-400 hover:text-amber-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" /></svg></button>)}
-                    <button onClick={() => handleDeleteTerritory(m.id)} title="Excluir" className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                </div>
-            </div>
-        );
-    };
 
     // Memoized data processing
     const availableMapsOptions = useMemo(() => {
         return territories
             .filter(t => t.status === TerritoryStatus.AVAILABLE)
             .sort((a, b) => {
-                const aDate = a.lastCompletedDate?.getTime() || 0;
-                const bDate = b.lastCompletedDate?.getTime() || 0;
-                
-                if (aDate !== bDate) {
-                    return aDate - bDate;
-                }
-                
-                return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+                const numA = parseInt(a.number) || 0;
+                const numB = parseInt(b.number) || 0;
+                if (numA !== numB) return numA - numB;
+                return (a.number || '').localeCompare(b.number || '', undefined, { numeric: true });
             });
     }, [territories]);
 
@@ -405,42 +306,14 @@ const AdminDashboard: React.FC = () => {
         const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
         // Filter based on active tab
-        if (activeTab === 'territories') {
-            processed = processed.filter(t => {
-                if (t.status === TerritoryStatus.IN_USE) return true;
-                if (t.status === TerritoryStatus.AVAILABLE) {
-                    if (!t.lastCompletedDate) return true;
-                    const diff = now.getTime() - t.lastCompletedDate.getTime();
-                    return diff > THIRTY_DAYS_MS;
-                }
-                return true; // Other statuses like REQUESTED, CLOSED
-            });
+        if (activeTab === 'dashboard') {
+            processed = processed.filter(t => t.status === TerritoryStatus.IN_USE);
+        } else if (activeTab === 'territories') {
+            processed = processed.filter(t => t.status === TerritoryStatus.AVAILABLE);
         } else if (activeTab === 'worked') {
-            processed = processed.filter(t => {
-                if (t.status !== TerritoryStatus.AVAILABLE || !t.lastCompletedDate) return false;
-                const diff = now.getTime() - t.lastCompletedDate.getTime();
-                return diff <= THIRTY_DAYS_MS;
-            });
+            processed = processed.filter(t => t.lastCompletedDate !== undefined);
         }
         
-        if (searchTerm) {
-            processed = processed.filter(t => 
-                t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (t.number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                t.assignedToName?.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-        }
-
-        if (filterStatus !== 'all' && activeTab === 'territories') {
-            processed = processed.filter(t => {
-                switch (filterStatus) {
-                    case 'available': return t.status === TerritoryStatus.AVAILABLE;
-                    case 'in_use': return t.status === TerritoryStatus.IN_USE;
-                    default: return true;
-                }
-            });
-        }
-
         const sortByNumber = (a: Territory, b: Territory) => {
             const numA = parseInt(a.number) || 0;
             const numB = parseInt(b.number) || 0;
@@ -464,67 +337,15 @@ const AdminDashboard: React.FC = () => {
                     return bDate - aDate;
                 }
                 default:
-                    // Default sort for Worked Maps: Newest return first (most recently worked)
-                    if (activeTab === 'worked') {
-                        const aDate = a.lastCompletedDate?.getTime() || 0;
-                        const bDate = b.lastCompletedDate?.getTime() || 0;
-                        return bDate - aDate;
-                    }
-
-                    // Default sort for Territories: Available first, then In Use
-                    if (a.status === TerritoryStatus.AVAILABLE && b.status !== TerritoryStatus.AVAILABLE) return -1;
-                    if (b.status === TerritoryStatus.AVAILABLE && a.status !== TerritoryStatus.AVAILABLE) return 1;
-                    
-                    // Within Available group in Territories tab, sort by return date (oldest first)
-                    if (a.status === TerritoryStatus.AVAILABLE && b.status === TerritoryStatus.AVAILABLE) {
-                        const aDate = a.lastCompletedDate?.getTime() || 0;
-                        const bDate = b.lastCompletedDate?.getTime() || 0;
-                        if (aDate !== bDate) return aDate - bDate;
-                    }
-
-                    // Within groups, sort numerically by number
                     return sortByNumber(a, b);
             }
         });
         return processed;
-    }, [territories, filterStatus, sortBy, searchTerm, activeTab]);
+    }, [territories, sortBy, activeTab]);
 
     const inUseTerritories = useMemo(() => displayTerritories.filter(t => t.status === TerritoryStatus.IN_USE), [displayTerritories]);
     const availableTerritories = useMemo(() => displayTerritories.filter(t => t.status === TerritoryStatus.AVAILABLE), [displayTerritories]);
     const otherTerritories = useMemo(() => displayTerritories.filter(t => t.status !== TerritoryStatus.IN_USE && t.status !== TerritoryStatus.AVAILABLE), [displayTerritories]);
-
-    const stats = useMemo(() => {
-        const total = territories.length;
-        const available = territories.filter(t => t.status === TerritoryStatus.AVAILABLE).length;
-        const inUse = territories.filter(t => t.status === TerritoryStatus.IN_USE).length;
-        const requested = territories.filter(t => t.status === TerritoryStatus.REQUESTED).length;
-        const closed = territories.filter(t => t.status === TerritoryStatus.CLOSED).length;
-
-        const pieData = [
-            { name: 'Disponíveis', value: available, color: '#10b981' }, // emerald-500
-            { name: 'Em Uso', value: inUse, color: '#3b82f6' }, // blue-500
-            { name: 'Solicitados', value: requested, color: '#f59e0b' }, // amber-500
-            { name: 'Fechados', value: closed, color: '#ef4444' } // red-500
-        ].filter(d => d.value > 0);
-
-        // Group by locality for bar chart
-        const localityMap = new Map<string, { name: string, total: number, inUse: number }>();
-        territories.forEach(t => {
-            const loc = t.locality || 'Outros';
-            if (!localityMap.has(loc)) {
-                localityMap.set(loc, { name: loc, total: 0, inUse: 0 });
-            }
-            const stats = localityMap.get(loc)!;
-            stats.total++;
-            if (t.status === TerritoryStatus.IN_USE) stats.inUse++;
-        });
-
-        const barData = Array.from(localityMap.values())
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 8);
-
-        return { total, available, inUse, requested, closed, pieData, barData };
-    }, [territories]);
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center p-20 space-y-4">
@@ -536,334 +357,507 @@ const AdminDashboard: React.FC = () => {
     const dropdownButtonClass = "w-full text-left px-3 py-2 text-sm font-bold text-slate-700 rounded-lg hover:bg-slate-100 transition-colors";
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8 pb-20">
-            {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={() => {}} />}
-            {editingTerritory && <EditMapModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={() => {}} />}
-            {showManualAssignModal && <ManualAssignmentModal territories={territories} users={users} onClose={() => setShowManualAssignModal(false)} onSuccess={() => {}} />}
-            {editingAssignment && <EditAssignmentDatesModal territory={editingAssignment} onClose={() => setEditingAssignment(null)} onSuccess={() => {}} />}
-            {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
-            {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} number={viewingMap.number} onClose={() => setViewingMap(null)} />}
-            
-            {confirmAction && (
-                <ConfirmModal 
-                    title={confirmAction.title}
-                    message={confirmAction.message}
-                    isDanger={confirmAction.isDanger}
-                    loading={confirmAction.loading}
-                    onConfirm={confirmAction.onConfirm}
-                    onCancel={() => setConfirmAction(null)}
-                />
-            )}
+        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-80px)] bg-slate-50/50">
+            <Sidebar 
+                activeTab={activeTab} 
+                setActiveTab={(tab) => {
+                    setActiveTab(tab);
+                    setIsSidebarOpen(false);
+                }} 
+                pendingRequestsCount={requests.length} 
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+                onAddTerritory={() => setShowAddModal(true)}
+                onManualAssign={() => setShowManualAssignModal(true)}
+            />
 
-            {errorMsg && (
-                <div className="fixed bottom-4 right-4 z-[110] bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-4">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                    <p className="text-xs font-black uppercase tracking-widest">{errorMsg}</p>
-                    <button onClick={() => setErrorMsg(null)} className="ml-4 p-1 hover:bg-white/20 rounded-lg">&times;</button>
+            <div className="flex-1 flex flex-col min-w-0">
+                {/* Mobile Header */}
+                <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 sticky top-0 z-40">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-xs">A</div>
+                        <h1 className="font-black text-slate-900 text-sm uppercase tracking-widest">Painel Admin</h1>
+                    </div>
+                    <button 
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16m-7 6h7" /></svg>
+                    </button>
                 </div>
-            )}
 
-            <div className="flex flex-col md:flex-row md:items-center justify-end gap-6 px-1">
-                <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-200 self-start md:self-auto">
-                    <button onClick={() => setActiveTab('territories')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'territories' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Mapas</button>
-                    <button onClick={() => setActiveTab('worked')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'worked' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Trabalhados</button>
-                    <button onClick={() => setActiveTab('users')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Usuários</button>
-                    <button onClick={() => setActiveTab('stats')} className={`px-5 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'stats' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Estatísticas</button>
-                </div>
-            </div>
+                <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-8 pb-20">
+                {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={() => {}} />}
+                {editingTerritory && <EditMapModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={() => {}} />}
+                {showManualAssignModal && (
+                    <ManualAssignmentModal 
+                        territories={territories} 
+                        users={users} 
+                        initialUserId={manualAssignUserId}
+                        onClose={() => {
+                            setShowManualAssignModal(false);
+                            setManualAssignUserId(undefined);
+                        }} 
+                        onSuccess={() => {}} 
+                    />
+                )}
+                {editingAssignment && <EditAssignmentDatesModal territory={editingAssignment} onClose={() => setEditingAssignment(null)} onSuccess={() => {}} />}
+                {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
+                {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} number={viewingMap.number} onClose={() => setViewingMap(null)} />}
+                
+                {confirmAction && (
+                    <ConfirmModal 
+                        title={confirmAction.title}
+                        message={confirmAction.message}
+                        isDanger={confirmAction.isDanger}
+                        loading={confirmAction.loading}
+                        onConfirm={confirmAction.onConfirm}
+                        onCancel={() => setConfirmAction(null)}
+                    />
+                )}
 
-            {activeTab === 'stats' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Pie Chart: Status Distribution */}
-                        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100">
-                            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Distribuição por Status</h3>
-                            <div className="h-64 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={stats.pieData}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={80}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                        >
-                                            {stats.pieData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.color} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip 
-                                            contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                            itemStyle={{ fontWeight: 'bold', fontSize: '12px' }}
-                                        />
-                                        <Legend verticalAlign="bottom" height={36}/>
-                                    </PieChart>
-                                </ResponsiveContainer>
+                {errorMsg && (
+                    <div className="fixed bottom-4 right-4 z-[110] bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-4">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        <p className="text-xs font-black uppercase tracking-widest">{errorMsg}</p>
+                        <button onClick={() => setErrorMsg(null)} className="ml-4 p-1 hover:bg-white/20 rounded-lg">&times;</button>
+                    </div>
+                )}
+
+                {activeTab === 'dashboard' && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h1 className="text-3xl font-black text-slate-900 tracking-tight">Olá, {user?.name.split(' ')[0]}!</h1>
+                                <p className="text-slate-500 font-medium">Aqui está o resumo da gestão de territórios hoje.</p>
                             </div>
                         </div>
 
-                        {/* Bar Chart: Localities */}
-                        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100">
-                            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-6">Top Localidades</h3>
-                            <div className="h-64 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={stats.barData}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis 
-                                            dataKey="name" 
-                                            axisLine={false} 
-                                            tickLine={false} 
-                                            tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
-                                        />
-                                        <YAxis 
-                                            axisLine={false} 
-                                            tickLine={false} 
-                                            tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
-                                        />
-                                        <Tooltip 
-                                            cursor={{ fill: '#f8fafc' }}
-                                            contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                        />
-                                        <Bar dataKey="total" name="Total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                                        <Bar dataKey="inUse" name="Em Uso" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Detailed Stats Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {[
-                            { label: 'Total', value: stats.total, color: 'text-slate-900', bg: 'bg-slate-50' },
-                            { label: 'Livres', value: stats.available, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                            { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600', bg: 'bg-blue-50' },
-                            { label: 'Solicitados', value: stats.requested, color: 'text-amber-600', bg: 'bg-amber-50' }
-                        ].map(s => (
-                            <div key={s.label} className={`${s.bg} p-6 rounded-3xl border border-white/50`}>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.label}</p>
-                                <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {(activeTab === 'territories' || activeTab === 'worked') ? (
-                <>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                        {[{ label: 'Total', value: stats.total, color: 'text-slate-900', border: 'border-slate-200' }, { label: 'Livres', value: stats.available, color: 'text-emerald-600', border: 'border-emerald-200' }, { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600', border: 'border-blue-200' }].map(s => (
-                            <div key={s.label} className={`bg-white p-5 rounded-2xl border-2 ${s.border}`}><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.label}</p><p className={`text-2xl font-black ${s.color}`}>{s.value}</p></div>
-                        ))}
-                    </div>
-
-                    {activeTab === 'territories' && requests.length > 0 && (
-                        <div className="space-y-3">
-                            <h2 className="text-[11px] font-black text-blue-900 uppercase tracking-[0.2em] px-2 flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>Solicitações Pendentes</h2>
-                            <div className="space-y-2">
-                                {requests.map(req => (
-                                    <div key={req.id} className="bg-white p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-2 border-slate-200">
-                                        <div><p className="font-black text-slate-900">{req.userName}</p><p className="text-[10px] text-slate-400 font-bold">{formatDate(req.requestDate)}</p></div>
-                                        <div className="flex flex-1 max-w-sm items-center gap-2">
-                                            {fulfillingRequestId === req.id ? (
-                                                <div className="flex flex-col gap-2 w-full animate-in slide-in-from-right-1">
-                                                    <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 bg-slate-50">
-                                                        {availableMapsOptions.length === 0 ? (
-                                                            <p className="text-[10px] text-slate-400 text-center py-2">Nenhum mapa disponível</p>
-                                                        ) : (
-                                                            <div className="grid grid-cols-1 gap-1">
-                                                                {availableMapsOptions.map(m => (
-                                                                    <label key={m.id} className="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer transition-colors">
-                                                                        <input 
-                                                                            type="checkbox" 
-                                                                            checked={selectedMapsForRequest.includes(m.id)}
-                                                                            onChange={(e) => {
-                                                                                if (e.target.checked) {
-                                                                                    setSelectedMapsForRequest(prev => [...prev, m.id]);
-                                                                                } else {
-                                                                                    setSelectedMapsForRequest(prev => prev.filter(id => id !== m.id));
-                                                                                }
-                                                                            }}
-                                                                            className="w-3 h-3 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                                                        />
-                                                                        <span className="text-[10px] font-bold text-slate-700 flex items-center gap-2">
-                                                                            <span className="bg-slate-900 text-white w-5 h-5 rounded flex items-center justify-center text-[8px] font-black shrink-0">
-                                                                                {m.number || '?'}
-                                                                            </span>
-                                                                            <span className="truncate">{m.name}</span>
-                                                                        </span>
-                                                                    </label>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">Data de Devolução</label>
-                                                        <input 
-                                                            type="date" 
-                                                            value={requestDueDate}
-                                                            onChange={(e) => setRequestDueDate(e.target.value)}
-                                                            className="w-full p-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold focus:outline-none focus:border-blue-500"
-                                                        />
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <button 
-                                                            onClick={() => handleFulfillRequest(req.id)} 
-                                                            disabled={selectedMapsForRequest.length === 0} 
-                                                            className="flex-1 py-2 bg-emerald-600 text-white font-black text-[10px] rounded-lg disabled:opacity-50"
-                                                        >
-                                                            Confirmar ({selectedMapsForRequest.length})
-                                                        </button>
-                                                        <button onClick={() => { setFulfillingRequestId(null); setSelectedMapsForRequest([]); }} className="px-3 py-2 bg-slate-100 text-slate-500 font-black text-[10px] rounded-lg">Cancelar</button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="flex gap-2 w-full sm:w-auto">
-                                                    <button onClick={() => { setFulfillingRequestId(req.id); setSelectedMapsForRequest([]); }} className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-wider rounded-lg shadow-sm">Atribuir</button>
-                                                    <button onClick={() => handleReject(req.id)} className="px-4 py-2.5 bg-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-wider rounded-lg">Recusar</button>
-                                                </div>
-                                            )}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            {[
+                                { label: 'Total', value: stats.total, color: 'text-slate-900', bg: 'bg-white', icon: 'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7' },
+                                { label: 'Livres', value: stats.available, color: 'text-emerald-600', bg: 'bg-white', icon: 'M5 13l4 4L19 7' },
+                                { label: 'Em Uso', value: stats.inUse, color: 'text-blue-600', bg: 'bg-white', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+                                { label: 'Pendentes', value: requests.length, color: 'text-amber-600', bg: 'bg-white', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' }
+                            ].map(s => (
+                                <div key={s.label} className={`${s.bg} p-5 rounded-3xl border border-slate-200 shadow-sm`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className={`p-2 rounded-xl ${s.color.replace('text', 'bg')}/10`}>
+                                            <svg className={`w-5 h-5 ${s.color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d={s.icon} /></svg>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
-                            <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em]">
-                                {activeTab === 'territories' ? 'Territórios' : 'Mapas Trabalhados (Últimos 30 dias)'}
-                            </h2>
-                            <div className="flex flex-1 max-w-md relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.label}</p>
+                                    <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
                                 </div>
-                                <input 
-                                    type="text" 
-                                    placeholder="Buscar por número, nome ou publicador..." 
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="block w-full pl-10 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                                />
-                            </div>
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                                <div className="relative" ref={filterMenuRef}>
-                                    <button onClick={() => setShowFilterMenu(!showFilterMenu)} className="flex items-center gap-2 px-4 py-2.5 bg-white text-slate-600 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50">
-                                        <FilterIcon />
-                                        Filtrar e Ordenar
-                                    </button>
-                                    {showFilterMenu && (
-                                        <>
-                                            {/* Backdrop for mobile to handle clicks and focus */}
-                                            <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 sm:hidden" onClick={() => setShowFilterMenu(false)}></div>
-                                            
-                                            <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:translate-y-0 mt-2 w-auto sm:w-64 bg-white rounded-3xl sm:rounded-2xl shadow-2xl border border-slate-100 z-50 p-4 sm:p-2 animate-in fade-in zoom-in-95 slide-in-from-bottom-8 sm:slide-in-from-top-2 origin-center sm:origin-top-right">
-                                                <div className="flex items-center justify-between mb-4 sm:hidden">
-                                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtros e Ordenação</h3>
-                                                    <button onClick={() => setShowFilterMenu(false)} className="p-2 text-slate-400 hover:text-slate-600">&times;</button>
+                            ))}
+                        </div>
+
+                        {requests.length > 0 && (
+                            <div className="bg-blue-50/50 rounded-[2.5rem] p-8 border border-blue-100">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h2 className="text-xl font-black text-blue-900 tracking-tight flex items-center gap-3">
+                                        <span className="w-3 h-3 rounded-full bg-blue-600 animate-pulse"></span>
+                                        Solicitações Pendentes
+                                    </h2>
+                                    <span className="px-3 py-1 bg-blue-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest">{requests.length} novos</span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {requests.map(req => (
+                                        <div key={req.id} className="bg-white p-6 rounded-3xl shadow-sm border border-blue-100 flex flex-col justify-between gap-6">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-black text-xl">
+                                                    {req.userName.charAt(0).toUpperCase()}
                                                 </div>
-                                                <div className="space-y-4 sm:space-y-2">
-                                                    <div>
-                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider px-3 pb-1">Filtrar por Status</p>
-                                                        <div className="flex flex-col gap-1 sm:gap-0">
-                                                            <button onClick={() => { setFilterStatus('all'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'all' ? 'bg-blue-50 text-blue-700' : ''}`}>Todos</button>
-                                                            <button onClick={() => { setFilterStatus('available'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'available' ? 'bg-blue-50 text-blue-700' : ''}`}>Livres</button>
-                                                            <button onClick={() => { setFilterStatus('in_use'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${filterStatus === 'in_use' ? 'bg-blue-50 text-blue-700' : ''}`}>Em Uso</button>
-                                                        </div>
-                                                    </div>
-                                                    <div className="h-px bg-slate-100 mx-2"></div>
-                                                    <div>
-                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider px-3 pb-1">Ordenar por</p>
-                                                        <div className="flex flex-col gap-1 sm:gap-0">
-                                                            <button onClick={() => { setSortBy('default'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'default' ? 'bg-blue-50 text-blue-700' : ''}`}>Padrão (Nº)</button>
-                                                            <button onClick={() => { setSortBy('name'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'name' ? 'bg-blue-50 text-blue-700' : ''}`}>Nome (A-Z)</button>
-                                                            <button onClick={() => { setSortBy('oldest'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'oldest' ? 'bg-blue-50 text-blue-700' : ''}`}>Mais Antigos</button>
-                                                            <button onClick={() => { setSortBy('newest'); setShowFilterMenu(false); }} className={`${dropdownButtonClass} ${sortBy === 'newest' ? 'bg-blue-50 text-blue-700' : ''}`}>Mais Recentes</button>
-                                                        </div>
-                                                    </div>
-                                                    <button onClick={() => setShowFilterMenu(false)} className="w-full mt-2 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-xl sm:hidden">Fechar</button>
+                                                <div>
+                                                    <p className="font-black text-slate-900 text-lg leading-none mb-1">{req.userName}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Solicitado em {formatDate(req.requestDate)}</p>
                                                 </div>
                                             </div>
-                                        </>
-                                    )}
+                                            
+                                            <div className="flex flex-col gap-4">
+                                                {fulfillingRequestId === req.id ? (
+                                                    <div className="space-y-4 animate-in slide-in-from-top-2">
+                                                        <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-2xl p-3 bg-slate-50 no-scrollbar">
+                                                            {availableMapsOptions.length === 0 ? (
+                                                                <p className="text-[10px] text-slate-400 text-center py-4 italic">Nenhum mapa disponível no momento.</p>
+                                                            ) : (
+                                                                <div className="grid grid-cols-1 gap-2">
+                                                                    {availableMapsOptions.map(m => (
+                                                                        <label key={m.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${selectedMapsForRequest.includes(m.id) ? 'bg-blue-600 text-white shadow-md' : 'bg-white hover:bg-slate-100 text-slate-700'}`}>
+                                                                            <input 
+                                                                                type="checkbox" 
+                                                                                checked={selectedMapsForRequest.includes(m.id)}
+                                                                                onChange={(e) => {
+                                                                                    if (e.target.checked) {
+                                                                                        setSelectedMapsForRequest(prev => [...prev, m.id]);
+                                                                                    } else {
+                                                                                        setSelectedMapsForRequest(prev => prev.filter(id => id !== m.id));
+                                                                                    }
+                                                                                }}
+                                                                                className="hidden"
+                                                                            />
+                                                                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${selectedMapsForRequest.includes(m.id) ? 'bg-white text-blue-600' : 'bg-slate-900 text-white'}`}>
+                                                                                {m.number || '?'}
+                                                                            </span>
+                                                                            <span className="text-xs font-bold truncate">{m.name}</span>
+                                                                            {selectedMapsForRequest.includes(m.id) && (
+                                                                                <svg className="w-4 h-4 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                                                            )}
+                                                                        </label>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Data de Devolução</label>
+                                                            <input 
+                                                                type="date" 
+                                                                value={requestDueDate}
+                                                                onChange={(e) => setRequestDueDate(e.target.value)}
+                                                                className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <button 
+                                                                onClick={() => handleFulfillRequest(req.id)} 
+                                                                disabled={selectedMapsForRequest.length === 0} 
+                                                                className="flex-1 py-3 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-blue-200 disabled:opacity-50"
+                                                            >
+                                                                Confirmar ({selectedMapsForRequest.length})
+                                                            </button>
+                                                            <button onClick={() => { setFulfillingRequestId(null); setSelectedMapsForRequest([]); }} className="px-4 py-3 bg-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-widest rounded-xl">Cancelar</button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => { setFulfillingRequestId(req.id); setSelectedMapsForRequest([]); }} className="flex-1 py-3 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-md hover:bg-blue-700 transition-all">Atribuir Mapa</button>
+                                                        <button onClick={() => handleReject(req.id)} className="px-4 py-3 bg-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-200 transition-all">Recusar</button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                                <button onClick={() => setShowAddModal(true)} className="px-4 py-2.5 bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-md">+ Novo Mapa</button>
+                            </div>
+                        )}
+
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                            <div className="flex items-center justify-between mb-8">
+                                <h2 className="text-xl font-black text-slate-900 tracking-tight">Mapas Designados</h2>
+                                <span className="px-3 py-1 bg-blue-50 text-blue-600 text-[10px] font-black rounded-full uppercase tracking-widest">{inUseTerritories.length} ativos</span>
+                            </div>
+                            <div className="overflow-x-auto no-scrollbar">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="border-b border-slate-100">
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nº</th>
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Território</th>
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Publicador</th>
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Atribuído em</th>
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {inUseTerritories.length > 0 ? inUseTerritories.map(t => (
+                                            <tr key={t.id} className="group hover:bg-slate-50/50 transition-all">
+                                                <td className="py-4">
+                                                    <span className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-black text-[10px]">{t.number}</span>
+                                                </td>
+                                                <td className="py-4">
+                                                    <p className="font-bold text-slate-900 text-sm">{t.name}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{t.locality}</p>
+                                                </td>
+                                                <td className="py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-6 h-6 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-black text-[10px]">
+                                                            {t.assignedToName?.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <span className="text-xs font-bold text-slate-700">{t.assignedToName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-4">
+                                                    <span className="text-xs font-bold text-slate-500">{formatDate(t.assignmentDate)}</span>
+                                                </td>
+                                                <td className="py-4 text-right">
+                                                    <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
+                                                </td>
+                                            </tr>
+                                        )) : (
+                                            <tr>
+                                                <td colSpan={5} className="py-12 text-center">
+                                                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Nenhum mapa designado no momento.</p>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'worked' && (
+                    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+                        <div className="space-y-6">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Mapas Trabalhados</h2>
+                                <p className="text-slate-500 font-medium text-sm">Mapas que foram devolvidos e estão disponíveis para nova designação.</p>
+                            </div>
+                            
+                            {displayTerritories.length > 0 ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                    {displayTerritories.map(m => (
+                                        <TerritoryCard 
+                                            key={m.id}
+                                            territory={m}
+                                            onEdit={setEditingTerritory}
+                                            onHistory={setViewHistory}
+                                            onReset={handleResetTerritory}
+                                            onDelete={handleDeleteTerritory}
+                                            onViewMap={setViewingMap}
+                                        />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-20 bg-white rounded-[2.5rem] border border-dashed border-slate-300">
+                                    <p className="font-black text-slate-900 text-lg">Nenhum mapa trabalhado recentemente</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                            <div className="flex items-center justify-between mb-8">
+                                <h2 className="text-xl font-black text-slate-900 tracking-tight">Histórico Global</h2>
+                                <span className="px-3 py-1 bg-slate-100 text-slate-600 text-[10px] font-black rounded-full uppercase tracking-widest">{globalHistory.length} registros</span>
+                            </div>
+                            <div className="overflow-x-auto no-scrollbar">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="border-b border-slate-100">
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nº</th>
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Território</th>
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Publicador</th>
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Período</th>
+                                            <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Concluído em</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {globalHistory.length > 0 ? globalHistory.map((h, idx) => (
+                                            <tr key={`${h.id}-${idx}`} className="group hover:bg-slate-50/50 transition-all">
+                                                <td className="py-4">
+                                                    <span className="w-8 h-8 rounded-lg bg-slate-100 text-slate-900 flex items-center justify-center font-black text-[10px]">{h.territoryNumber}</span>
+                                                </td>
+                                                <td className="py-4">
+                                                    <p className="font-bold text-slate-900 text-sm">{h.territoryName}</p>
+                                                </td>
+                                                <td className="py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center font-black text-[10px]">
+                                                            {h.userName?.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <span className="text-xs font-bold text-slate-700">{h.userName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-4">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                                        {formatDate(h.assignedDate)} — {formatDate(h.completedDate)}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 text-right">
+                                                    <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-emerald-100">Concluído</span>
+                                                </td>
+                                            </tr>
+                                        )) : (
+                                            <tr>
+                                                <td colSpan={5} className="py-12 text-center">
+                                                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Nenhum histórico disponível.</p>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'territories' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Gestão de Territórios</h2>
+                                <p className="text-slate-500 font-medium text-sm">Visualize e organize todos os mapas da congregação.</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setShowManualAssignModal(true)} className="px-4 py-2.5 bg-white text-slate-600 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-all">
+                                    Atribuição Manual
+                                </button>
                             </div>
                         </div>
                         
                         {displayTerritories.length > 0 ? (
-                            <div className="space-y-8">
-                                {inUseTerritories.length > 0 && (filterStatus === 'all' || filterStatus === 'in_use') && (
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-3 px-2">
-                                            <div className="h-px flex-1 bg-blue-100"></div>
-                                            <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] whitespace-nowrap">Mapas Designados ({inUseTerritories.length})</h3>
-                                            <div className="h-px flex-1 bg-blue-100"></div>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {inUseTerritories.map(m => renderTerritoryCard(m))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {availableTerritories.length > 0 && (filterStatus === 'all' || filterStatus === 'available') && (
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-3 px-2">
-                                            <div className="h-px flex-1 bg-emerald-100"></div>
-                                            <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.3em] whitespace-nowrap">
-                                                {activeTab === 'territories' ? 'Mapas Disponíveis' : 'Mapas em Quarentena'} ({availableTerritories.length})
-                                            </h3>
-                                            <div className="h-px flex-1 bg-emerald-100"></div>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {availableTerritories.map(m => renderTerritoryCard(m))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {otherTerritories.length > 0 && filterStatus === 'all' && (
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-3 px-2">
-                                            <div className="h-px flex-1 bg-slate-100"></div>
-                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] whitespace-nowrap">Outros Status ({otherTerritories.length})</h3>
-                                            <div className="h-px flex-1 bg-slate-100"></div>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {otherTerritories.map(m => renderTerritoryCard(m))}
-                                        </div>
-                                    </div>
-                                )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                {displayTerritories.map(m => (
+                                    <TerritoryCard 
+                                        key={m.id}
+                                        territory={m}
+                                        onEdit={setEditingTerritory}
+                                        onHistory={setViewHistory}
+                                        onReset={handleResetTerritory}
+                                        onDelete={handleDeleteTerritory}
+                                        onViewMap={setViewingMap}
+                                    />
+                                ))}
                             </div>
                         ) : (
-                            <div className="text-center py-16 bg-white rounded-2xl border-2 border-slate-200 col-span-1 md:col-span-2">
-                                <p className="font-bold text-slate-500">Nenhum território encontrado.</p>
-                                <p className="text-sm text-slate-400 mt-1">Tente ajustar os filtros ou adicione um novo mapa.</p>
+                            <div className="text-center py-20 bg-white rounded-[2.5rem] border border-dashed border-slate-300">
+                                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+                                </div>
+                                <p className="font-black text-slate-900 text-lg">Nenhum território disponível</p>
+                                <p className="text-slate-400 font-medium mt-1">Todos os mapas podem estar em uso ou ainda não foram cadastrados.</p>
                             </div>
                         )}
                     </div>
-                </>
-            ) : activeTab === 'users' ? (
-                <div className="space-y-4">
-                    <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] px-2">Gestão de Usuários</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {users.map(u => (
-                            <div key={u.id} className="bg-white p-5 rounded-2xl border-2 border-slate-200 flex items-center justify-between gap-4">
-                                <div className="flex-1 overflow-hidden"><p className="font-black text-slate-900 text-lg leading-tight truncate">{u.name}</p><p className="font-bold text-slate-400 text-[10px] truncate mb-2">{u.email}</p><span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider ${u.role === 'admin' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>{u.role}</span></div>
-                                <button onClick={() => handlePromote(u)} className="px-3 py-2.5 bg-slate-50 text-slate-600 text-[9px] font-black rounded-lg border border-slate-200 uppercase tracking-tighter">Cargo</button>
+                )}
+
+                {activeTab === 'users' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Gestão de Usuários</h2>
+                                <p className="text-slate-500 font-medium text-sm">Gerencie permissões e cargos dos publicadores.</p>
                             </div>
-                        ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {users.map(u => (
+                                <div key={u.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between gap-6">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg ${u.role === 'admin' ? 'bg-gradient-to-br from-indigo-600 to-blue-700' : 'bg-gradient-to-br from-slate-400 to-slate-600'}`}>
+                                            {u.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-black text-slate-900 text-lg leading-tight truncate">{u.name}</p>
+                                            <p className="font-bold text-slate-400 text-[10px] truncate uppercase tracking-widest mb-2">{u.email}</p>
+                                            <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${u.role === 'admin' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
+                                                {u.role}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => {
+                                                setManualAssignUserId(u.id);
+                                                setShowManualAssignModal(true);
+                                            }}
+                                            className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all"
+                                        >
+                                            Designar Mapa
+                                        </button>
+                                        <button 
+                                            onClick={() => handlePromote(u)} 
+                                            className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                                                u.role === 'admin' 
+                                                    ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' 
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            {u.role === 'admin' ? 'Remover Admin' : 'Tornar Admin'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                </div>
-            ) : (
-                <div className="space-y-6">
-                    {/* Stats content already rendered above if activeTab is stats, but we need to handle the case where it's not territories/worked/users */}
-                </div>
-            )}
+                )}
+
+                {activeTab === 'stats' && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Estatísticas e Relatórios</h2>
+                                <p className="text-slate-500 font-medium text-sm">Visão detalhada da cobertura do território.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
+                                <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-8">Distribuição por Status</h3>
+                                <div className="h-72 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={stats.pieData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={70}
+                                                outerRadius={100}
+                                                paddingAngle={8}
+                                                dataKey="value"
+                                            >
+                                                {stats.pieData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip 
+                                                contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px 20px' }}
+                                                itemStyle={{ fontWeight: 'bold', fontSize: '12px' }}
+                                            />
+                                            <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em' }}/>
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
+                                <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-8">Top Localidades</h3>
+                                <div className="h-72 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={stats.barData}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                            <XAxis 
+                                                dataKey="name" 
+                                                axisLine={false} 
+                                                tickLine={false} 
+                                                tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                            />
+                                            <YAxis 
+                                                axisLine={false} 
+                                                tickLine={false} 
+                                                tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                            />
+                                            <Tooltip 
+                                                cursor={{ fill: '#f8fafc' }}
+                                                contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px 20px' }}
+                                            />
+                                            <Bar dataKey="total" name="Total" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={32} />
+                                            <Bar dataKey="inUse" name="Em Uso" fill="#10b981" radius={[6, 6, 0, 0]} barSize={32} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {[
+                                { label: 'Total Geral', value: stats.total, color: 'text-slate-900', bg: 'bg-white' },
+                                { label: 'Disponíveis', value: stats.available, color: 'text-emerald-600', bg: 'bg-white' },
+                                { label: 'Designados', value: stats.inUse, color: 'text-blue-600', bg: 'bg-white' },
+                                { label: 'Fechados', value: stats.closed, color: 'text-red-600', bg: 'bg-white' }
+                            ].map(s => (
+                                <div key={s.label} className={`${s.bg} p-8 rounded-[2rem] border border-slate-200 shadow-sm`}>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{s.label}</p>
+                                    <p className={`text-4xl font-black ${s.color}`}>{s.value}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
-    );
+    </div>
+);
 };
 
 export default AdminDashboard;

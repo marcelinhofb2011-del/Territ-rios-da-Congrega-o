@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Territory, RequestStatus, TerritoryStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { requestTerritory, submitReport, toggleWorkedOn, parseDate, hydrateHistory } from '../services/api';
+import { requestTerritory, submitReport, toggleWorkedOn, parseDate, hydrateHistory, reversalTerritory } from '../services/api';
 import { formatDate, getDeadlineColorInfo, getDaysRemaining } from '../utils/helpers';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -21,7 +21,6 @@ const PublisherDashboard: React.FC = () => {
     const [actionLoading, setActionLoading] = useState(false);
     
     // UI states
-    const [searchTerm, setSearchTerm] = useState('');
     const [isCompactView, setIsCompactView] = useState(false);
     const [isSubmittingAll, setIsSubmittingAll] = useState(false);
 
@@ -88,12 +87,6 @@ const PublisherDashboard: React.FC = () => {
         };
     }, [user]);
 
-    const filteredTerritories = useMemo(() => {
-        return myTerritories.filter(t => 
-            t.name.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [myTerritories, searchTerm]);
-
     const handleRequest = async () => {
         if (!user || actionLoading) return;
         setActionLoading(true);
@@ -116,6 +109,23 @@ const PublisherDashboard: React.FC = () => {
             console.error("Erro ao devolver:", err);
             setError(`Erro ao devolver território. Verifique as permissões.`);
             setTimeout(() => setError(''), 6000);
+        }
+    };
+
+    const handleReversal = async (territory: Territory) => {
+        if (!user || actionLoading) return;
+        
+        const confirm = window.confirm(`Deseja realizar o ESTORNO do mapa ${territory.number || territory.name}? O mapa voltará para os disponíveis como se não tivesse sido trabalhado.`);
+        if (!confirm) return;
+
+        setActionLoading(true);
+        try {
+            await reversalTerritory(user, territory.id);
+        } catch (err: any) {
+            setError('Erro ao realizar estorno do mapa.');
+            setTimeout(() => setError(''), 5000);
+        } finally {
+            setActionLoading(false);
         }
     };
 
@@ -266,56 +276,15 @@ const PublisherDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {myTerritories.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Trabalhados</p>
-                        <div className="flex items-end gap-2">
-                            <span className="text-3xl font-black text-emerald-600">{myTerritories.filter(t => t.workedOn).length}</span>
-                            <span className="text-gray-300 font-bold mb-1">/ {myTerritories.length}</span>
-                        </div>
-                    </div>
-                    <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Atrasados</p>
-                        <span className={`text-3xl font-black ${myTerritories.some(t => (getDaysRemaining(t.dueDate) ?? 0) < 0) ? 'text-red-600' : 'text-gray-900'}`}>
-                            {myTerritories.filter(t => (getDaysRemaining(t.dueDate) ?? 0) < 0).length}
-                        </span>
-                    </div>
-                    <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Próximo Prazo</p>
-                        <span className="text-sm font-black text-gray-900">
-                            {myTerritories.length > 0 
-                                ? formatDate(new Date(Math.min(...myTerritories.map(t => t.dueDate?.getTime() || Infinity))))
-                                : 'N/A'}
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            {myTerritories.length > 0 && (
-                <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                    </div>
-                    <input 
-                        type="text" 
-                        placeholder="Buscar por nome ou número..." 
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="block w-full pl-16 pr-8 py-6 bg-white border-2 border-gray-50 rounded-[2.5rem] text-gray-900 font-bold placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-8 focus:ring-blue-50/30 transition-all shadow-2xl shadow-gray-200/40"
-                    />
-                </div>
-            )}
-            
             {error && <div className="bg-red-50 text-red-600 p-5 rounded-3xl border-2 border-red-100 font-bold animate-in fade-in slide-in-from-top-2 shadow-sm">{error}</div>}
 
             {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} number={viewingMap.number} onClose={() => setViewingMap(null)} />}
             {reportingTerritory && <ReportModal territory={reportingTerritory} onClose={() => setReportingTerritory(null)} onSubmit={handleSubmitReport} />}
             {historyTerritory && <TerritoryHistoryModal territory={historyTerritory} onClose={() => setHistoryTerritory(null)} />}
 
-            {filteredTerritories.length > 0 ? (
+            {myTerritories.length > 0 ? (
                 <div className={isCompactView ? "space-y-4" : "grid grid-cols-1 md:grid-cols-2 gap-8"}>
-                    {filteredTerritories.map((territory, index) => {
+                    {myTerritories.map((territory, index) => {
                         const colorInfo = getDeadlineColorInfo(territory.dueDate);
                         const daysRemaining = getDaysRemaining(territory.dueDate) ?? 0;
                         const progress = Math.max(5, 100 - (daysRemaining / 30) * 100);
@@ -358,17 +327,35 @@ const PublisherDashboard: React.FC = () => {
                                         </div>
                                     </div>
                                     
-                                    <div className="flex items-center gap-2">
-                                        <button 
-                                            onClick={() => handleToggleWorked(territory)}
-                                            className={`p-3 rounded-xl transition-all border ${territory.workedOn ? 'text-emerald-600 bg-emerald-100 border-emerald-200' : 'text-gray-300 bg-gray-50 border-gray-100 hover:border-emerald-200 hover:text-emerald-600'}`}
-                                            title={territory.workedOn ? "Desmarcar como trabalhado" : "Marcar como trabalhado"}
-                                        >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                                        </button>
-                                            <button onClick={() => window.open(territory.pdfUrl, '_blank')} className="px-4 py-3 bg-gray-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all">Ver Mapa</button>
-                                        <button onClick={() => setReportingTerritory(territory)} className="px-4 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100">Concluir</button>
-                                    </div>
+                                        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-3 mt-4 sm:mt-0">
+                                            <button 
+                                                onClick={() => handleToggleWorked(territory)}
+                                                className={`p-4 rounded-2xl transition-all border-2 flex items-center justify-center ${territory.workedOn ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-gray-300 bg-gray-50 border-gray-100 hover:border-emerald-100 hover:text-emerald-600'}`}
+                                                title={territory.workedOn ? "Desmarcar como trabalhado" : "Marcar como trabalhado"}
+                                            >
+                                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                            </button>
+                                            <button onClick={() => window.open(territory.pdfUrl, '_blank')} className="flex items-center justify-center gap-2 px-6 py-4 bg-gray-900 text-white rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg">
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                Ver Mapa
+                                            </button>
+                                            <button onClick={() => handleShareDirect(territory)} className="flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                                                Enviar
+                                            </button>
+                                            <button 
+                                                onClick={() => handleReversal(territory)}
+                                                className="flex items-center justify-center gap-2 px-6 py-4 bg-amber-100 text-amber-700 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-amber-200 transition-all"
+                                                title="Estornar mapa (não trabalhado)"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                                                Estornar
+                                            </button>
+                                            <button onClick={() => setReportingTerritory(territory)} className="flex items-center justify-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                                Concluir
+                                            </button>
+                                        </div>
                                 </div>
                             );
                         }
@@ -469,36 +456,31 @@ const PublisherDashboard: React.FC = () => {
                                         </div>
                                     )}
 
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button onClick={() => window.open(territory.pdfUrl, '_blank')} className="flex flex-col items-center justify-center gap-2 py-5 bg-gray-900 text-white rounded-[2rem] hover:bg-black transition-all transform active:scale-95 shadow-xl">
-                                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                                <span className="text-[9px] font-black uppercase tracking-widest">Ver Mapa</span>
-                                            </button>
-                                            <button onClick={() => handleShareDirect(territory)} className="flex flex-col items-center justify-center gap-2 py-5 bg-blue-600 text-white rounded-[2rem] hover:bg-blue-700 transition-all transform active:scale-95 shadow-xl shadow-blue-100">
-                                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                                                <span className="text-[9px] font-black uppercase tracking-widest">Enviar</span>
-                                            </button>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button onClick={() => setHistoryTerritory(territory)} className="flex flex-col items-center justify-center gap-2 py-5 bg-gray-100 text-gray-600 rounded-[2rem] hover:bg-gray-200 transition-all">
-                                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                                <span className="text-[9px] font-black uppercase tracking-widest">Histórico</span>
-                                            </button>
-                                            <button onClick={() => setReportingTerritory(territory)} className="flex flex-col items-center justify-center gap-2 py-5 bg-emerald-600 text-white rounded-[2rem] hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100">
-                                                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                                                <span className="text-[9px] font-black uppercase tracking-widest">Concluir</span>
-                                            </button>
-                                        </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                        <button onClick={() => window.open(territory.pdfUrl, '_blank')} className="flex flex-col items-center justify-center gap-4 py-10 bg-gray-900 text-white rounded-[3rem] hover:bg-black transition-all transform active:scale-95 shadow-2xl">
+                                            <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                            <span className="text-sm font-black uppercase tracking-widest">Ver Mapa</span>
+                                        </button>
+                                        <button onClick={() => handleShareDirect(territory)} className="flex flex-col items-center justify-center gap-4 py-10 bg-blue-600 text-white rounded-[3rem] hover:bg-blue-700 transition-all transform active:scale-95 shadow-2xl shadow-blue-100">
+                                            <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                                            <span className="text-sm font-black uppercase tracking-widest">Enviar</span>
+                                        </button>
+                                        <button 
+                                            onClick={() => handleReversal(territory)}
+                                            className="flex flex-col items-center justify-center gap-4 py-10 bg-amber-100 text-amber-700 rounded-[3rem] hover:bg-amber-200 transition-all transform active:scale-95 shadow-lg"
+                                        >
+                                            <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                                            <span className="text-sm font-black uppercase tracking-widest">Estornar</span>
+                                        </button>
+                                        <button onClick={() => setReportingTerritory(territory)} className="flex flex-col items-center justify-center gap-4 py-10 bg-emerald-600 text-white rounded-[3rem] hover:bg-emerald-700 transition-all transform active:scale-95 shadow-2xl shadow-emerald-100">
+                                            <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                            <span className="text-sm font-black uppercase tracking-widest">Concluir</span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                         );
                     })}
-                </div>
-            ) : searchTerm ? (
-                <div className="text-center py-20 bg-white rounded-[3rem] border-2 border-dashed border-gray-100">
-                    <p className="text-gray-400 font-bold">Nenhum mapa encontrado para "{searchTerm}"</p>
                 </div>
             ) : hasPendingRequest ? (
                 <div className="bg-white p-12 rounded-[3rem] text-center border-2 border-blue-50 shadow-xl shadow-gray-100/50">
