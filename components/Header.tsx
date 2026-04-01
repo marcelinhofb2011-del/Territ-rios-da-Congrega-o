@@ -74,12 +74,24 @@ const Header: React.FC = () => {
     <header className="bg-white border-b border-gray-100 sticky top-0 z-40 backdrop-blur-md bg-white/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          {user.role === 'admin' && (
+            <button 
+              onClick={() => window.dispatchEvent(new CustomEvent('open-admin-sidebar'))}
+              className="lg:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors mr-1"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16m-7 6h7" /></svg>
+            </button>
+          )}
           <div className="w-12 h-12 flex items-center justify-center rounded-full shadow-sm overflow-hidden">
              <MapIcon className="w-full h-full"/>
           </div>
           <div>
-            <h1 className="text-xl font-black text-gray-900 tracking-tight leading-none">territorio</h1>
-            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1">{user.role === 'admin' ? 'ADM' : 'Congregação'}</p>
+            <h1 className="text-xl font-black text-gray-900 tracking-tight leading-none">
+              {user.role === 'admin' ? 'Painel Admin' : 'território'}
+            </h1>
+            {user.role !== 'admin' && (
+              <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1">Congregação</p>
+            )}
           </div>
         </div>
 

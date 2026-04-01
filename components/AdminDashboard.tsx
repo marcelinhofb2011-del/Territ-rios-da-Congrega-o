@@ -120,6 +120,12 @@ const AdminDashboard: React.FC = () => {
 
     // Listeners for realtime data
     useEffect(() => {
+        const handleOpenSidebar = () => setIsSidebarOpen(true);
+        window.addEventListener('open-admin-sidebar', handleOpenSidebar);
+        return () => window.removeEventListener('open-admin-sidebar', handleOpenSidebar);
+    }, []);
+
+    useEffect(() => {
         if (user) {
             console.log("AdminDashboard: Current user role:", user.role);
         }
@@ -309,9 +315,9 @@ const AdminDashboard: React.FC = () => {
         if (activeTab === 'dashboard') {
             processed = processed.filter(t => t.status === TerritoryStatus.IN_USE);
         } else if (activeTab === 'territories') {
-            processed = processed.filter(t => t.status === TerritoryStatus.AVAILABLE);
+            processed = processed.filter(t => t.status === TerritoryStatus.AVAILABLE && !t.lastCompletedDate);
         } else if (activeTab === 'worked') {
-            processed = processed.filter(t => t.lastCompletedDate !== undefined);
+            processed = processed.filter(t => t.status === TerritoryStatus.AVAILABLE && t.lastCompletedDate);
         }
         
         const sortByNumber = (a: Territory, b: Territory) => {
@@ -372,20 +378,6 @@ const AdminDashboard: React.FC = () => {
             />
 
             <div className="flex-1 flex flex-col min-w-0">
-                {/* Mobile Header */}
-                <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 sticky top-0 z-40">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-xs">A</div>
-                        <h1 className="font-black text-slate-900 text-sm uppercase tracking-widest">Painel Admin</h1>
-                    </div>
-                    <button 
-                        onClick={() => setIsSidebarOpen(true)}
-                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-                    >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16m-7 6h7" /></svg>
-                    </button>
-                </div>
-
                 <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-8 pb-20">
                 {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={() => {}} />}
                 {editingTerritory && <EditMapModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={() => {}} />}
@@ -477,7 +469,7 @@ const AdminDashboard: React.FC = () => {
                                             <div className="flex flex-col gap-4">
                                                 {fulfillingRequestId === req.id ? (
                                                     <div className="space-y-4 animate-in slide-in-from-top-2">
-                                                        <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-2xl p-3 bg-slate-50 no-scrollbar">
+                                                        <div className="max-h-64 overflow-y-auto border border-slate-100 rounded-2xl p-3 bg-slate-50 no-scrollbar">
                                                             {availableMapsOptions.length === 0 ? (
                                                                 <p className="text-[10px] text-slate-400 text-center py-4 italic">Nenhum mapa disponível no momento.</p>
                                                             ) : (
@@ -547,7 +539,8 @@ const AdminDashboard: React.FC = () => {
                                 <span className="px-3 py-1 bg-blue-50 text-blue-600 text-[10px] font-black rounded-full uppercase tracking-widest">{inUseTerritories.length} ativos</span>
                             </div>
                             <div className="overflow-x-auto no-scrollbar">
-                                <table className="w-full text-left">
+                                {/* Desktop Table */}
+                                <table className="hidden md:table w-full text-left">
                                     <thead>
                                         <tr className="border-b border-slate-100">
                                             <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nº</th>
@@ -579,7 +572,16 @@ const AdminDashboard: React.FC = () => {
                                                     <span className="text-xs font-bold text-slate-500">{formatDate(t.assignmentDate)}</span>
                                                 </td>
                                                 <td className="py-4 text-right">
-                                                    <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
+                                                        <button 
+                                                            onClick={() => handleResetTerritory(t.id)}
+                                                            title="Retomar território"
+                                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         )) : (
@@ -591,6 +593,43 @@ const AdminDashboard: React.FC = () => {
                                         )}
                                     </tbody>
                                 </table>
+
+                                {/* Mobile List */}
+                                <div className="md:hidden space-y-4">
+                                    {inUseTerritories.length > 0 ? inUseTerritories.map(t => (
+                                        <div key={t.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-black text-[10px]">{t.number}</span>
+                                                <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider border border-blue-100">Em Uso</span>
+                                            </div>
+                                            <div>
+                                                <p className="font-black text-slate-900 text-sm">{t.name}</p>
+                                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{t.locality}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-6 h-6 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-black text-[10px]">
+                                                        {t.assignedToName?.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <span className="text-xs font-bold text-slate-700">{t.assignedToName}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase">{formatDate(t.assignmentDate)}</span>
+                                                    <button 
+                                                        onClick={() => handleResetTerritory(t.id)}
+                                                        className="p-2 text-red-600 bg-red-50 rounded-lg font-black text-[9px] uppercase tracking-widest"
+                                                    >
+                                                        Retomar
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="py-12 text-center">
+                                            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Nenhum mapa designado no momento.</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

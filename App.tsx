@@ -30,7 +30,7 @@ const AppContent: React.FC = () => {
   return (
     <div className={`min-h-screen ${isAdmin ? 'bg-slate-50' : 'bg-gray-50'}`}>
       <Header />
-      <main className="p-4 sm:p-6 md:p-8">
+      <main>
         {isAdmin ? (
           <AdminDashboard />
         ) : (

@@ -21,7 +21,7 @@ const PublisherDashboard: React.FC = () => {
     const [actionLoading, setActionLoading] = useState(false);
     
     // UI states
-    const [isCompactView, setIsCompactView] = useState(false);
+    const [isCompactView, setIsCompactView] = useState(true);
     const [isSubmittingAll, setIsSubmittingAll] = useState(false);
 
     useEffect(() => {
