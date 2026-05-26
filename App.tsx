@@ -5,12 +5,21 @@ import LoginPage from './components/LoginPage';
 import AdminDashboard from './components/AdminDashboard';
 import PublisherDashboard from './components/PublisherDashboard';
 import Header from './components/Header';
+import BottomNav from './components/BottomNav';
 import { usePushNotifications } from './hooks/usePushNotifications';
 import ErrorBoundary from './components/ErrorBoundary';
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
+  const [activeTab, setActiveTab] = React.useState<'dashboard' | 'available' | 'in_use' | 'history' | 'users' | 'stats' | 'settings' | 'home' | 'request'>('dashboard');
   usePushNotifications(user);
+
+  // Reset tab strictly to 'dashboard' when the user changes or logs in
+  React.useEffect(() => {
+    if (user) {
+      setActiveTab('dashboard');
+    }
+  }, [user?.id]);
 
   if (loading) {
     return (
@@ -28,15 +37,22 @@ const AppContent: React.FC = () => {
   const isAdmin = user.role === 'admin' || user.email?.toLowerCase() === 'marcelinhofb2011@gmail.com';
 
   return (
-    <div className={`min-h-screen ${isAdmin ? 'bg-slate-50' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${isAdmin ? 'bg-slate-50' : 'bg-slate-50'}`}>
       <Header />
-      <main>
+      <main className={isAdmin ? "" : "pb-24 lg:pb-0"}>
         {isAdmin ? (
-          <AdminDashboard />
+          <AdminDashboard activeTab={activeTab} setActiveTab={setActiveTab as any} />
         ) : (
-          <PublisherDashboard />
+          <PublisherDashboard activeTab={activeTab} setActiveTab={setActiveTab as any} />
         )}
       </main>
+      {!isAdmin && (
+        <BottomNav 
+          activeTab={activeTab} 
+          setActiveTab={setActiveTab} 
+          isAdmin={isAdmin}
+        />
+      )}
     </div>
   );
 };

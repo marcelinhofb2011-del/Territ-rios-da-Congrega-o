@@ -3,7 +3,7 @@ import { Territory } from '../../types';
 import { updateTerritory } from '../../services/api';
 
 const EditMapModal: React.FC<{ territory: Territory; onClose: () => void; onSave: () => void; }> = ({ territory, onClose, onSave }) => {
-    const [name, setName] = useState(territory.name);
+    const [name, setName] = useState(territory.name || '');
     const [number, setNumber] = useState(territory.number || '');
     const [locality, setLocality] = useState(territory.locality || '');
     const [description, setDescription] = useState(territory.description || '');

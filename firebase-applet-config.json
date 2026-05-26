@@ -3,7 +3,7 @@
   "appId": "1:396161771960:web:2f52708dd2548b3a6f074d",
   "apiKey": "AIzaSyBW8lAeE58sh7-Nx7Q4RWSVUqPTl8RZ5LY",
   "authDomain": "territorio-70c0c.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-35096386-0145-4c8d-b78e-4c97f28a9795",
+  "firestoreDatabaseId": "(default)",
   "storageBucket": "territorio-70c0c.firebasestorage.app",
   "messagingSenderId": "396161771960",
   "measurementId": ""

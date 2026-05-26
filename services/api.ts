@@ -349,18 +349,34 @@ export const fetchAllTerritories = async (): Promise<Territory[]> => {
             return [];
         }
         
-        const list = querySnapshot.docs.map(doc => {
-            const data = doc.data();
+        const list = querySnapshot.docs.map(docSnapshot => {
+            const data = docSnapshot.data();
+            const returnedAt = parseDate(data.returnedAt);
+            const availableAt = parseDate(data.availableAt);
+            let status = data.status as TerritoryStatus;
+            
+            // Verificação automática de liberação:
+            const now = new Date();
+            if (status === TerritoryStatus.RESTING && availableAt && now >= availableAt) {
+                status = TerritoryStatus.AVAILABLE;
+                // Sincroniza com o Firestore em segundo plano
+                updateDoc(doc(db, 'territories', docSnapshot.id), { status: TerritoryStatus.AVAILABLE })
+                    .catch(err => console.error("Error auto-releasing territory:", err));
+            }
+
             return {
                 ...data,
-                id: doc.id,
+                id: docSnapshot.id,
                 name: data.name || 'Sem Nome',
+                status,
                 createdAt: parseDate(data.createdAt) || new Date(),
                 assignmentDate: parseDate(data.assignmentDate),
                 dueDate: parseDate(data.dueDate),
                 lastCompletedDate: parseDate(data.lastCompletedDate),
                 assignmentOrder: data.assignmentOrder,
-                history: hydrateHistory(data.history || [])
+                history: hydrateHistory(data.history || []),
+                returnedAt,
+                availableAt
             } as Territory;
         });
 
@@ -467,7 +483,11 @@ export const uploadTerritory = async (
         
     } catch (error: any) {
         console.error("Erro no upload para Supabase:", error);
-        throw new Error(error.message || "Erro ao salvar arquivo no Supabase. Verifique a configuração.");
+        let errorMsg = error.message || "Erro ao salvar arquivo no Supabase. Verifique a configuração.";
+        if (errorMsg.includes("fetch") || errorMsg.includes("Failed to fetch") || errorMsg.includes("Network Error")) {
+            errorMsg += " (DICA: Verifique se o seu projeto Supabase não está pausado por inatividade no painel do Supabase. Caso sim, basta reativar clicando em 'Restore project').";
+        }
+        throw new Error(errorMsg);
     }
 };
 
@@ -551,6 +571,51 @@ export const adminResetTerritory = async (territoryId: string, adminUser: User):
                 assignmentDate: null,
                 dueDate: null,
                 lastCompletedDate: Timestamp.now(),
+                history: newHistory
+            });
+        });
+    } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `territories/${territoryId}`);
+    }
+};
+
+export const adminCompleteTerritory = async (territoryId: string, adminUser: User): Promise<void> => {
+    const territoryRef = doc(db, 'territories', territoryId);
+    
+    try {
+        await runTransaction(db, async (transaction) => {
+            const territoryDoc = await transaction.get(territoryRef);
+            if (!territoryDoc.exists()) throw new Error("Território não encontrado.");
+
+            const territoryData = territoryDoc.data();
+            let newHistory = territoryData.history || [];
+
+            if (territoryData.assignedTo) {
+                const historyEntry = {
+                    userId: territoryData.assignedTo,
+                    userName: territoryData.assignedToName,
+                    assignmentDate: territoryData.assignmentDate,
+                    completedDate: Timestamp.now(),
+                    notes: `Território concluído pelo administrador (${adminUser.name}).`
+                };
+                newHistory.push(historyEntry);
+            }
+            
+            const returnedAt = Timestamp.now();
+            const availableAtDate = new Date();
+            availableAtDate.setDate(availableAtDate.getDate() + 35);
+            const availableAt = Timestamp.fromDate(availableAtDate);
+
+            transaction.update(territoryRef, {
+                status: TerritoryStatus.RESTING,
+                assignedTo: null,
+                assignedToName: null,
+                assignmentDate: null,
+                dueDate: null,
+                lastCompletedDate: returnedAt,
+                returnedAt: returnedAt,
+                availableAt: availableAt,
+                workedOn: false,
                 history: newHistory
             });
         });
@@ -917,13 +982,20 @@ export const submitReport = async (user: User, territoryId: string, notes: strin
             
             const currentHistory = territoryData.history || [];
 
+            const returnedAt = Timestamp.now();
+            const availableAtDate = new Date();
+            availableAtDate.setDate(availableAtDate.getDate() + 35);
+            const availableAt = Timestamp.fromDate(availableAtDate);
+
             transaction.update(territoryRef, {
-                status: TerritoryStatus.AVAILABLE,
+                status: TerritoryStatus.RESTING,
                 assignedTo: null,
                 assignedToName: null,
                 assignmentDate: null,
                 dueDate: null,
-                lastCompletedDate: Timestamp.now(),
+                lastCompletedDate: returnedAt,
+                returnedAt: returnedAt,
+                availableAt: availableAt,
                 workedOn: false,
                 history: [...currentHistory, historyEntry]
             });
@@ -1038,10 +1110,10 @@ export const fetchPublisherData = async (userId: string): Promise<{ myTerritory:
     
     let myTerritory: Territory | null = null;
     if (!territorySnapshot.empty) {
-        const doc = territorySnapshot.docs[0];
-        const data = doc.data();
+        const docSnapshot = territorySnapshot.docs[0];
+        const data = docSnapshot.data();
         myTerritory = {
-            id: doc.id,
+            id: docSnapshot.id,
             name: data.name || 'Sem Nome',
             number: data.number || '',
             locality: data.locality || '',
@@ -1056,7 +1128,9 @@ export const fetchPublisherData = async (userId: string): Promise<{ myTerritory:
             dueDate: parseDate(data.dueDate),
             lastCompletedDate: parseDate(data.lastCompletedDate),
             permanentNotes: data.permanentNotes || '',
-            history: hydrateHistory(data.history || [])
+            history: hydrateHistory(data.history || []),
+            returnedAt: parseDate(data.returnedAt),
+            availableAt: parseDate(data.availableAt)
         } as Territory;
     }
     

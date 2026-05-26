@@ -116,19 +116,21 @@ service cloud.firestore {
 
     function isValidTerritory(data) {
       return hasRequiredFields(['name', 'number', 'locality', 'description', 'observation', 'status', 'pdfUrl', 'createdAt', 'history']) &&
-             hasOnlyAllowedFields(['name', 'number', 'locality', 'description', 'observation', 'status', 'pdfUrl', 'createdAt', 'history', 'assignedTo', 'assignedToName', 'assignmentDate', 'dueDate', 'lastCompletedDate', 'permanentNotes', 'workedOn', 'assignmentOrder', 'id']) &&
+             hasOnlyAllowedFields(['name', 'number', 'locality', 'description', 'observation', 'status', 'pdfUrl', 'createdAt', 'history', 'assignedTo', 'assignedToName', 'assignmentDate', 'dueDate', 'lastCompletedDate', 'permanentNotes', 'workedOn', 'assignmentOrder', 'id', 'returnedAt', 'availableAt']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.number is string && data.number.size() > 0 &&
              data.locality is string && data.locality.size() > 0 &&
              data.description is string && data.description.size() < 1000 &&
              data.observation is string && data.observation.size() < 1000 &&
-             data.status in ['disponivel', 'solicitado', 'em_uso', 'fechado'] &&
+             data.status in ['disponivel', 'solicitado', 'em_uso', 'fechado', 'descanso'] &&
              data.pdfUrl is string && isValidUrl(data.pdfUrl) &&
              data.createdAt is timestamp &&
              isValidList(data.history, 100) &&
              (!('permanentNotes' in data) || (data.permanentNotes is string && data.permanentNotes.size() < 2000)) &&
              (!('workedOn' in data) || data.workedOn is bool) &&
-             (!('assignmentOrder' in data) || data.assignmentOrder is number);
+             (!('assignmentOrder' in data) || data.assignmentOrder is number) &&
+             (!('returnedAt' in data) || data.returnedAt is timestamp || data.returnedAt == null) &&
+             (!('availableAt' in data) || data.availableAt is timestamp || data.availableAt == null);
     }
 
     function isValidRequest(data) {
@@ -179,7 +181,7 @@ service cloud.firestore {
         isSignedIn() && 
         resource.data.assignedTo == request.auth.uid && 
         isValidTerritory(request.resource.data) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['workedOn', 'history', 'status', 'assignedTo', 'assignedToName', 'assignmentDate', 'dueDate', 'lastCompletedDate'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['workedOn', 'history', 'status', 'assignedTo', 'assignedToName', 'assignmentDate', 'dueDate', 'lastCompletedDate', 'returnedAt', 'availableAt'])
       );
     }
 

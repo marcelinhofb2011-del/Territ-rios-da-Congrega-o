@@ -133,19 +133,52 @@ const InteractiveImageViewer: React.FC<{ src: string; alt: string; onError: () =
 };
 
 
+const getGoogleDriveFileId = (link: string): string | null => {
+    if (!link) return null;
+    try {
+        const fileDMatch = link.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+        if (fileDMatch && fileDMatch[1]) return fileDMatch[1];
+
+        const dMatch = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (dMatch && dMatch[1]) return dMatch[1];
+        
+        const idMatch = link.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (idMatch && idMatch[1]) return idMatch[1];
+    } catch (e) {
+        console.error('Error parsing Google Drive URL:', e);
+    }
+    return null;
+};
+
+const isGoogleDriveLink = (link: string): boolean => {
+    if (!link) return false;
+    const l = link.toLowerCase();
+    return l.includes('drive.google.com') || l.includes('docs.google.com') || l.includes('googleusercontent.com');
+};
+
+
 const MapViewerModal: React.FC<{ url: string; name: string; number?: string; onClose: () => void }> = ({ url, name, number, onClose }) => {
     const [loadError, setLoadError] = useState(false);
+    const [tryAsImage, setTryAsImage] = useState(true);
+    
+    const fileId = getGoogleDriveFileId(url);
+    const isGoogleDrive = isGoogleDriveLink(url) && !!fileId;
     
     // Improved detection logic
     const isDataUrl = url.startsWith('data:');
-    const isPdf = /\.pdf($|\?)/i.test(url) || url.toLowerCase().includes('application/pdf');
-    const isImage = /\.(jpeg|jpg|gif|png|webp)($|\?)/i.test(url) || url.toLowerCase().includes('image/');
+    const isPdf = !isGoogleDrive && (/\.pdf($|\?)/i.test(url) || url.toLowerCase().includes('application/pdf'));
+    const isImage = isGoogleDrive 
+        ? tryAsImage 
+        : (/\.(jpeg|jpg|gif|png|webp)($|\?)/i.test(url) || url.toLowerCase().includes('image/'));
     
     // Google Docs Viewer can be flaky and doesn't support Data URLs.
     // For Data URLs or if we want to try native viewing first, we use the URL directly.
     const viewerUrl = (isPdf && !isDataUrl) 
         ? `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true` 
         : url;
+
+    const displayImageUrl = isGoogleDrive ? `https://lh3.googleusercontent.com/d/${fileId}` : url;
+    const drivePreviewUrl = isGoogleDrive ? `https://drive.google.com/file/d/${fileId}/preview` : '';
 
     const modalRef = useRef<HTMLDivElement>(null);
     const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
@@ -162,6 +195,10 @@ const MapViewerModal: React.FC<{ url: string; name: string; number?: string; onC
     };
 
     const handleDownload = async () => {
+        if (isGoogleDrive && fileId) {
+            window.open(`https://drive.google.com/uc?export=download&id=${fileId}`, '_blank');
+            return;
+        }
         try {
             const response = await fetch(url);
             const blob = await response.blob();
@@ -230,22 +267,72 @@ const MapViewerModal: React.FC<{ url: string; name: string; number?: string; onC
                         <button onClick={onClose} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all text-2xl font-bold">&times;</button>
                     </div>
                 </header>
+
+                {url.toLowerCase().includes('supabase.co') && (
+                    <div className="bg-amber-50 text-amber-900 px-6 py-3 border-b border-amber-100 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in slide-in-from-top duration-300">
+                        <div className="flex items-start gap-2.5">
+                            <span className="flex h-2.5 w-2.5 mt-0.5 relative shrink-0">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                            </span>
+                            <div className="text-xs font-bold leading-normal">
+                                Se o mapa não abrir, seu projeto <span className="text-amber-700 font-extrabold">Supabase pode estar pausado</span> por inatividade. Caso seja o Administrador, basta reativar no Supabase.
+                            </div>
+                        </div>
+                        <a 
+                            href="https://supabase.com/dashboard" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="inline-flex items-center justify-center bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all self-start sm:self-center shrink-0 shadow-sm"
+                        >
+                            Ir para o Supabase
+                        </a>
+                    </div>
+                )}
+
                 <div className="flex-grow w-full h-full bg-gray-50 flex items-center justify-center relative">
                     {loadError ? (
-                        <div className="text-center p-12 max-w-sm">
+                        <div className="text-center p-8 max-w-md mx-auto">
                             <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
                                 <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                             </div>
                             <h3 className="text-xl font-black text-gray-900 mb-2">Ops! O mapa não carregou</h3>
-                            <p className="text-gray-500 mb-8 font-medium">Não conseguimos exibir o mapa aqui. Você pode tentar abrir diretamente no seu navegador.</p>
+                            {url.toLowerCase().includes('supabase.co') ? (
+                                <div className="space-y-4 mb-6 text-left bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+                                    <p className="text-xs font-medium text-gray-600">
+                                        Detectamos que este arquivo está guardado no <strong className="text-blue-600">Supabase</strong>. O erro indica que as conexões falharam. Isso ocorre quando o Supabase <strong className="text-red-500">pausa o projeto automaticamente</strong> após alguns dias de inatividade no plano gratuito.
+                                    </p>
+                                    <div className="bg-amber-50 border border-amber-100 text-amber-800 rounded-xl p-4 text-[11px] font-bold space-y-2">
+                                        <p className="uppercase tracking-wider text-[9px] text-amber-600 font-black">Como o Administrador resolve isso:</p>
+                                        <ol className="list-decimal pl-4 space-y-1 text-gray-700">
+                                            <li>Acesse o <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-amber-900 underline font-black">Dashboard do Supabase</a>.</li>
+                                            <li>Abra o projeto chamado <strong className="text-amber-950">"Territórios"</strong>.</li>
+                                            <li>Clique no botão <strong className="text-amber-950">"Restore Project"</strong> (ou Retomar Projeto).</li>
+                                            <li>Aguarde 2 minutinhos e recarregue esta página! Todos os mapas voltarão ao normal.</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-gray-500 mb-8 font-medium font-bold">Não conseguimos exibir o mapa aqui. Você pode tentar abrir diretamente no seu navegador clicando abaixo.</p>
+                            )}
                             <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                                 ABRIR MAPA DIRETO
                             </a>
                         </div>
                     ) : isImage ? (
-                        <InteractiveImageViewer src={url} alt={`Mapa ${name}`} onError={() => setLoadError(true)} />
-                    ) : isPdf ? (
+                        <InteractiveImageViewer 
+                            src={displayImageUrl} 
+                            alt={`Mapa ${name}`} 
+                            onError={() => {
+                                if (isGoogleDrive && tryAsImage) {
+                                    setTryAsImage(false);
+                                } else {
+                                    setLoadError(true);
+                                }
+                            }} 
+                        />
+                    ) : (isPdf || isGoogleDrive) ? (
                         isDataUrl ? (
                             <embed
                                 src={url}
@@ -254,10 +341,10 @@ const MapViewerModal: React.FC<{ url: string; name: string; number?: string; onC
                             />
                         ) : (
                             <iframe
-                                src={viewerUrl}
+                                src={isGoogleDrive ? drivePreviewUrl : viewerUrl}
                                 className="w-full h-full border-0"
                                 title={`Mapa ${name}`}
-                                sandbox="allow-scripts allow-same-origin"
+                                sandbox={isGoogleDrive ? undefined : "allow-scripts allow-same-origin"}
                                 onError={() => setLoadError(true)}
                                 referrerPolicy="no-referrer"
                             />

@@ -7,7 +7,9 @@ import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app); // Volta a usar o banco de dados (default) onde estão os dados originais
+export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
 export const storage = getStorage(app);
 
 // Messaging só funciona em ambientes que suportam Service Workers e Push

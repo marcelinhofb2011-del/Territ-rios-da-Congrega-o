@@ -1,0 +1,97 @@
+/* Microsoft Fluent Design System Styles for 'Territórios' */
+
+@import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;600;700&display=swap');
+
+body {
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f3f2f1; /* Fluent light gray background */
+  color: #323130; /* Fluent dark carbon text */
+}
+
+/* Accent controls */
+:root {
+  --microsoft-blue: #0078d4;
+  --microsoft-blue-hover: #106ebe;
+  --microsoft-blue-active: #005a9e;
+  --microsoft-gray-10: #f3f2f1;
+  --microsoft-gray-20: #faf9f8;
+  --microsoft-gray-30: #edebe9;
+  --microsoft-gray-90: #323130;
+  --microsoft-gray-60: #8a8886;
+  --microsoft-green: #107c41;
+  --microsoft-red: #a80000;
+}
+
+/* Custom Fluent scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f3f2f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #c8c6c4;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a19f9d;
+}
+
+/* Fluent-like inputs */
+input, select, textarea {
+  font-family: inherit;
+  border-radius: 4px !important;
+  border-color: #8a8886 !important;
+  transition: all 0.15s ease-in-out;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #0078d4 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 1px #0078d4 !important;
+}
+
+/* Crisp containers on Fluent look and feel */
+.fluent-card {
+  background: #ffffff;
+  border: 1px solid #c8c6c4;
+  box-shadow: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.12), 0 0.3px 0.9px 0 rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+.fluent-btn {
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: 4px !important;
+  font-size: 14px;
+  padding: 6px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+}
+
+.fluent-btn-primary {
+  background-color: #0078d4;
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+.fluent-btn-primary:hover {
+  background-color: #106ebe;
+}
+.fluent-btn-primary:active {
+  background-color: #005a9e;
+}
+
+.fluent-btn-secondary {
+  background-color: #ffffff;
+  color: #323130;
+  border: 1px solid #8a8886;
+}
+.fluent-btn-secondary:hover {
+  background-color: #f3f2f1;
+  color: #201f1e;
+}
+.fluent-btn-secondary:active {
+  background-color: #edebe9;
+}

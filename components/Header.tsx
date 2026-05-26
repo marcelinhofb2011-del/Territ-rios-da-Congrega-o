@@ -71,62 +71,63 @@ const Header: React.FC = () => {
   if (!user) return null;
 
   return (
-    <header className="bg-white border-b border-gray-100 sticky top-0 z-40 backdrop-blur-md bg-white/80">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-50 transition-all">
+      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="flex items-center gap-4">
           {user.role === 'admin' && (
             <button 
               onClick={() => window.dispatchEvent(new CustomEvent('open-admin-sidebar'))}
-              className="lg:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors mr-1"
+              className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-950 rounded-2xl transition-all flex items-center justify-center border border-slate-200 bg-slate-50 shadow-sm"
+              aria-label="Abrir Menu"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16m-7 6h7" /></svg>
+              <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <line x1="4" y1="6" x2="20" y2="6" className="text-blue-600 stroke-blue-600" />
+                <line x1="4" y1="12" x2="14" y2="12" />
+                <line x1="4" y1="18" x2="18" y2="18" />
+              </svg>
             </button>
           )}
-          <div className="w-12 h-12 flex items-center justify-center rounded-full shadow-sm overflow-hidden">
-             <MapIcon className="w-full h-full"/>
+          <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-50 border border-gray-200 shadow-sm overflow-hidden transform hover:bg-gray-100 transition-all cursor-pointer">
+             <MapIcon className="w-7 h-7"/>
           </div>
           <div>
-            <h1 className="text-xl font-black text-gray-900 tracking-tight leading-none">
-              {user.role === 'admin' ? 'Painel Admin' : 'território'}
+            <h1 className="text-lg font-bold text-gray-800 tracking-tight leading-none">
+              {user.role === 'admin' ? 'Administração de Territórios' : 'Territórios'}
             </h1>
-            {user.role !== 'admin' && (
-              <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1">Congregação</p>
-            )}
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mt-0.5">Congregação Vila Cisper</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2">
           {/* Sino de Notificações */}
           <div className="relative" ref={dropdownRef}>
             <button 
               onClick={() => { setShowDropdown(!showDropdown); handleMarkAsRead(); }}
-              className="p-3 bg-gray-50 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all relative"
+              className="p-2.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded transition-all relative"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
               {unreadCount > 0 && (
-                <span className="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-black text-white ring-2 ring-white">
-                  {unreadCount}
-                </span>
+                <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-blue-600 ring-2 ring-white"></span>
               )}
             </button>
 
             {showDropdown && (
-              <div className="absolute right-0 mt-3 w-80 bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                <div className="p-4 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
-                  <h3 className="font-black text-gray-800">Notificações</h3>
+              <div className="absolute right-0 mt-2 w-80 bg-white rounded border border-gray-200 shadow-lg overflow-hidden animate-in fade-in duration-100 z-50 p-4">
+                <div className="px-1 py-1 mb-2 border-b border-gray-100 flex justify-between items-center">
+                  <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Atividade Recente</h3>
                 </div>
-                <div className="max-h-96 overflow-y-auto no-scrollbar">
+                <div className="max-h-80 overflow-y-auto space-y-1">
                   {notifications.length > 0 ? (
                     notifications.map(n => (
-                      <div key={n.id} className={`p-4 border-b border-gray-50 transition-colors ${!n.read ? 'bg-blue-50/30' : ''}`}>
-                        <p className="text-sm font-bold text-gray-700 leading-snug">{n.message}</p>
-                        <p className="text-[10px] font-black text-gray-400 uppercase mt-2">{formatDate(n.createdAt)}</p>
+                      <div key={n.id} className={`p-3 rounded transition-all ${!n.read ? 'bg-blue-50/50 border-l-2 border-blue-600' : 'hover:bg-gray-50'}`}>
+                        <p className="text-xs font-semibold text-gray-700 leading-normal">{n.message}</p>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase mt-1 tracking-wider">{formatDate(n.createdAt)}</p>
                       </div>
                     ))
                   ) : (
-                    <div className="p-10 text-center text-gray-400 font-bold italic">Nenhuma notificação nova.</div>
+                    <div className="py-10 text-center text-gray-400 font-semibold text-xs py-8 italic">Nenhuma nova atividade.</div>
                   )}
                 </div>
               </div>
@@ -137,32 +138,28 @@ const Header: React.FC = () => {
           <div className="relative" ref={userMenuRef}>
             <button 
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center gap-3 p-1.5 pr-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+              className="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded transition-all"
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-lg shadow-md">
+              <div className="w-8 h-8 rounded bg-blue-600 hover:bg-blue-700 shadow-sm flex items-center justify-center text-white font-bold text-sm transition-all">
                 {user.name.charAt(0).toUpperCase()}
-              </div>
-              <div className="hidden sm:block text-left">
-                <p className="text-sm font-black text-gray-900 leading-none">{user.name.split(' ')[0]}</p>
-                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1">{user.role}</p>
               </div>
             </button>
 
             {showUserMenu && (
-              <div className="absolute right-0 mt-3 w-56 bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                <div className="p-4 bg-gray-50/50 border-b border-gray-100">
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Sua Conta</p>
-                  <p className="text-sm font-bold text-gray-800 truncate">{user.email}</p>
+              <div className="absolute right-0 mt-2 w-72 bg-white rounded border border-gray-200 shadow-lg overflow-hidden animate-in fade-in duration-100 z-50 p-5">
+                <div className="mb-4 text-center border-b border-gray-100 pb-3">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Perfil Ativo</p>
+                  <p className="text-sm font-bold text-gray-800 leading-tight">{user.name}</p>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">{user.email}</p>
                 </div>
-                <button 
-                  onClick={logout}
-                  className="w-full p-4 flex items-center gap-3 text-red-600 font-black text-sm hover:bg-red-50 transition-all"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  SAIR DO SISTEMA
-                </button>
+                <div className="space-y-1">
+                  <button 
+                    onClick={logout}
+                    className="w-full py-2 bg-red-50 text-red-700 rounded hover:bg-red-600 hover:text-white transition-all text-xs font-semibold tracking-wider flex items-center justify-center gap-2 border border-red-100"
+                  >
+                    Sair da Conta
+                  </button>
+                </div>
               </div>
             )}
           </div>

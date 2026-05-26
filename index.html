@@ -16,6 +16,72 @@
     
     <title>territorio</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Segoe UI', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+              mono: ['Consolas', 'Courier New', 'monospace'],
+            },
+            borderRadius: {
+              'xs': '2px',
+              'sm': '4px',
+              'md': '4px',
+              'lg': '6px',
+              'xl': '8px',
+              '2xl': '8px',
+              '3xl': '12px',
+              'full': '9999px',
+            },
+            colors: {
+              blue: {
+                50: '#eff6ff',
+                100: '#dbeafe',
+                200: '#bfdbfe',
+                300: '#93c5fd',
+                400: '#60a5fa',
+                500: '#0078d4', // Microsoft Blue Brand Accent
+                600: '#0078d4', // Primary Blue
+                700: '#106ebe', // Microsoft blue hover
+                800: '#005a9e', // Active Blue
+                900: '#004578',
+              },
+              emerald: {
+                500: '#107c41', // Microsoft Excel/Office green
+                600: '#107c41',
+                700: '#0b5a30',
+              },
+              slate: {
+                50: '#f8fafc',
+                100: '#f1f5f9',
+                200: '#e2e8f0',
+                300: '#cbd5e1',
+                400: '#94a3b8',
+                500: '#64748b',
+                600: '#475569',
+                700: '#334155',
+                800: '#1e293b',
+                900: '#201f1e', // Microsoft text black
+              },
+              gray: {
+                50: '#faf9f8',  // Fluent light gray
+                100: '#f3f2f1', // Fluent page background
+                150: '#dbdad9', // Custom border spacer (added)
+                200: '#c8c6c4', // High contrast Fluent border for cards
+                300: '#a19f9d', // Fluent secondary
+                400: '#8a8886',
+                500: '#797775',
+                600: '#605e5c',
+                700: '#484644',
+                800: '#323130',
+                900: '#201f1e',
+              }
+            }
+          }
+        }
+      }
+    </script>
     <script type="importmap">
 {
   "imports": {

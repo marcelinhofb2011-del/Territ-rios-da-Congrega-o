@@ -3,6 +3,7 @@ export enum TerritoryStatus {
   REQUESTED = 'solicitado',
   IN_USE = 'em_uso',
   CLOSED = 'fechado',
+  RESTING = 'descanso',
 }
 
 export enum RequestStatus {
@@ -48,6 +49,8 @@ export interface Territory {
   history: TerritoryHistory[];
   permanentNotes?: string;
   workedOn?: boolean;
+  returnedAt?: Date | null;
+  availableAt?: Date | null;
 }
 
 export interface TerritoryRequest {

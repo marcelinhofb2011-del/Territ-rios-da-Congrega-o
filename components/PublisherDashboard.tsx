@@ -9,7 +9,12 @@ import MapViewerModal from './modals/MapViewerModal';
 import TerritoryHistoryModal from './modals/TerritoryHistoryModal';
 import ReportModal from './modals/ReportModal';
 
-const PublisherDashboard: React.FC = () => {
+interface PublisherDashboardProps {
+    activeTab?: string;
+    setActiveTab?: (tab: string) => void;
+}
+
+const PublisherDashboard: React.FC<PublisherDashboardProps> = ({ activeTab, setActiveTab }) => {
     const { user } = useAuth();
     const [myTerritories, setMyTerritories] = useState<Territory[]>([]);
     const [hasPendingRequest, setHasPendingRequest] = useState(false);
@@ -175,106 +180,123 @@ const PublisherDashboard: React.FC = () => {
 
     if (loading) return <div className="flex justify-center p-20"><div className="animate-spin h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full"></div></div>;
     
-    return (
-        <div className="max-w-5xl mx-auto space-y-8 pb-20 px-4">
-            {myTerritories.some(t => (getDaysRemaining(t.dueDate) ?? 0) < 0) && (
-                <div className="bg-red-50 border-2 border-red-100 p-6 rounded-[2rem] flex items-center gap-4 animate-in slide-in-from-top-4 shadow-sm">
-                    <div className="bg-red-100 p-3 rounded-2xl text-red-600">
-                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </div>
+    if (activeTab === 'request') {
+        return (
+            <div className="max-w-5xl mx-auto space-y-8 pb-20 px-6">
+                <header className="py-6 border-b border-gray-205 text-left mb-6 bg-white p-6 rounded shadow-sm">
                     <div>
-                        <h4 className="text-red-900 font-black uppercase tracking-widest text-sm">Atenção: Território Atrasado</h4>
-                        <p className="text-red-700 text-xs font-bold">Você tem um ou mais mapas com o prazo de devolução vencido. Por favor, conclua o trabalho assim que possível.</p>
+                        <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">Central do Publicador</p>
+                        <h1 className="text-2xl font-black text-gray-800 tracking-tight leading-none mb-1 font-sans">Solicitar Mapas</h1>
+                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Peça novos mapas de território para trabalhar</p>
                     </div>
-                </div>
-            )}
-            
-            {myTerritories.length > 0 && (
-                <div className="bg-white rounded-[3rem] border-2 border-gray-50 shadow-2xl shadow-gray-200/50 overflow-hidden">
-                    <div className="p-8 sm:p-10 border-b border-gray-50 bg-gray-50/30">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="bg-blue-600 p-2 rounded-xl text-white">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                            </div>
-                            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">Quadro de Prazos</h2>
-                        </div>
-                        <div className="space-y-6">
-                            {myTerritories.map(t => {
-                                const daysRemaining = getDaysRemaining(t.dueDate);
-                                const isOverdue = daysRemaining !== null && daysRemaining < 0;
-                                const colorInfo = getDeadlineColorInfo(t.dueDate);
-                                const progress = Math.min(100, Math.max(0, ((30 - (daysRemaining || 0)) / 30) * 100));
+                </header>
 
-                                return (
-                                    <div key={`deadline-${t.id}`} className="space-y-2">
-                                        <div className="flex justify-between items-end">
-                                            <div className="flex items-center gap-3">
-                                                <span className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-black text-gray-600">{t.number || '?'}</span>
-                                                <div>
-                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Território</p>
-                                                    <p className="text-sm font-black text-gray-900 leading-none">{t.name}</p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Prazo: {formatDate(t.dueDate)}</p>
-                                                <div className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md inline-block ${colorInfo.bgColor} ${colorInfo.textColor}`}>
-                                                    {isOverdue ? `Atrasado ${Math.abs(daysRemaining)}d` : `${daysRemaining} dias restantes`}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden p-0.5">
-                                            <div className={`${colorInfo.bgColor} h-full rounded-full transition-all duration-1000 shadow-sm`} style={{ width: `${progress}%` }}></div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                {error && <div className="bg-red-50 text-red-600 p-5 rounded-3xl border-2 border-red-100 font-bold animate-in fade-in shadow-sm">{error}</div>}
+
+                {hasPendingRequest ? (
+                    <div className="bg-white p-8 rounded-[2rem] border border-gray-200 text-center shadow-lg max-w-lg mx-auto py-12">
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl mb-6 border border-blue-100">
+                            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
+                        <h3 className="text-xl font-black text-gray-800">Pedido em Análise</h3>
+                        <p className="text-gray-500 mt-2 text-xs font-semibold max-w-sm mx-auto leading-normal">
+                            Sua solicitação está na fila de espera. O administrador irá atribuir novos mapas para você em breve.
+                        </p>
                     </div>
-                </div>
-            )}
+                ) : (
+                    <div className="bg-white p-8 rounded-[2rem] text-center border border-gray-200 shadow-lg max-w-lg mx-auto py-12">
+                        <div className="w-16 h-16 bg-blue-50 border border-blue-100 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 text-blue-600">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+                        </div>
+                        <h3 className="text-xl font-black text-gray-800 mb-2">Solicitar Novo Território</h3>
+                        <p className="text-gray-500 mb-8 max-w-sm mx-auto text-xs font-semibold leading-relaxed">
+                            Ao solicitar, o administrador receberá uma notificação e preparará um mapa adequado para você em breve.
+                        </p>
+                        <button
+                            onClick={handleRequest}
+                            disabled={actionLoading}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-8 rounded-2xl transition-all shadow-lg shadow-blue-500/20 uppercase"
+                        >
+                            {actionLoading ? 'ENVIANDO...' : 'CONFIRMAR SOLICITAÇÃO'}
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    }
 
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+    return (
+        <div className="max-w-5xl mx-auto space-y-12 pb-20 px-6">
+            <header className="py-6 border-b border-gray-200 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 bg-white p-6 rounded shadow-sm">
                 <div>
-                    <h1 className="text-5xl font-black text-gray-900 tracking-tight mb-2">Meus Mapas</h1>
-                    <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></div>
-                            {myTerritories.length} {myTerritories.length === 1 ? 'Território Ativo' : 'Territórios Ativos'}
+                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-2">Central do Publicador</p>
+                    <h1 className="text-2xl font-bold text-gray-800 tracking-tight leading-none mb-2 font-sans">Meus Mapas Designados</h1>
+                    <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-800 text-white rounded text-[10px] font-semibold uppercase tracking-wider">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
+                            {myTerritories.length} Associados
                         </span>
-                        <p className="text-gray-400 font-bold text-xs">Acompanhe seu progresso e prazos</p>
                     </div>
                 </div>
                 
-                <div className="flex items-center gap-3">
-                    {myTerritories.length > 1 && (
-                        <button 
-                            onClick={handleCompleteAll}
-                            disabled={isSubmittingAll}
-                            className="px-6 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:bg-gray-300"
-                        >
-                            {isSubmittingAll ? 'Concluindo...' : 'Concluir Todos'}
-                        </button>
-                    )}
+                <div className="flex items-center gap-2">
                     {myTerritories.length > 0 && (
-                        <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm">
+                        <div className="flex items-center gap-1 bg-gray-50 p-1 border border-gray-200 rounded">
                             <button 
                                 onClick={() => setIsCompactView(false)}
-                                className={`p-2 rounded-xl transition-all ${!isCompactView ? 'bg-gray-900 text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}
-                                title="Visualização em Cards"
+                                className={`p-1.5 rounded transition-all ${!isCompactView ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-750'}`}
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                             </button>
                             <button 
                                 onClick={() => setIsCompactView(true)}
-                                className={`p-2 rounded-xl transition-all ${isCompactView ? 'bg-gray-900 text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}
-                                title="Visualização em Lista"
+                                className={`p-1.5 rounded transition-all ${isCompactView ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-755'}`}
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" /></svg>
                             </button>
                         </div>
                     )}
                 </div>
-            </div>
+            </header>
+
+            {myTerritories.length > 0 && (
+                <section className="bg-white rounded border border-gray-200 p-6 shadow-sm mb-6">
+                    <div className="flex items-center gap-2 mb-6">
+                        <div className="w-1.5 h-5 bg-blue-600 rounded-sm" />
+                        <h2 className="text-lg font-bold text-gray-800 tracking-tight">Quadro de Prazos</h2>
+                    </div>
+                    <div className="space-y-4">
+                        {myTerritories.map(t => {
+                            const daysRemaining = getDaysRemaining(t.dueDate);
+                            const isOverdue = daysRemaining !== null && daysRemaining < 0;
+                            const colorInfo = getDeadlineColorInfo(t.dueDate);
+                            const progress = Math.min(100, Math.max(0, ((30 - (daysRemaining || 0)) / 30) * 100));
+
+                            return (
+                                <div key={`deadline-${t.id}`} className="space-y-2">
+                                    <div className="flex justify-between items-end">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 border border-gray-250">{t.number || '?'}</div>
+                                            <div>
+                                                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider leading-none mb-1">{t.locality}</p>
+                                                <p className="text-xs font-bold text-gray-700 leading-none">{t.name}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border inline-block ${colorInfo.bgColor} ${colorInfo.textColor}`}>
+                                                {isOverdue ? `Atrasado ${Math.abs(daysRemaining)}d` : `${daysRemaining} dias restantes`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="w-full bg-gray-100 rounded h-1.5 overflow-hidden">
+                                        <div className={`${isOverdue ? 'bg-red-600' : 'bg-blue-600'} h-full transition-all duration-1000`} style={{ width: `${progress}%` }}></div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </section>
+            )}
 
             {error && <div className="bg-red-50 text-red-600 p-5 rounded-3xl border-2 border-red-100 font-bold animate-in fade-in slide-in-from-top-2 shadow-sm">{error}</div>}
 
@@ -293,7 +315,7 @@ const PublisherDashboard: React.FC = () => {
 
                         if (isCompactView) {
                             return (
-                                <div key={territory.id} className={`group bg-white p-5 rounded-[2rem] border-2 transition-all hover:shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${territory.workedOn ? 'border-emerald-100 bg-emerald-50/20' : 'border-gray-50'}`}>
+                                <div key={territory.id} className={`group bg-white p-5 rounded-[2rem] border-2 transition-all hover:shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${territory.workedOn ? 'border-emerald-100 bg-emerald-50/20' : 'border-gray-200'}`}>
                                     <div className="flex items-center gap-4">
                                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black shrink-0 ${isOverdue ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
                                             {mapNumber}
@@ -361,9 +383,9 @@ const PublisherDashboard: React.FC = () => {
                         }
 
                         return (
-                            <div key={territory.id} className={`group bg-white rounded-[3rem] shadow-2xl shadow-gray-200/50 border-2 overflow-hidden transition-all hover:shadow-blue-100/40 hover:-translate-y-1 ${territory.workedOn ? 'border-emerald-200' : 'border-gray-50'}`}>
-                                <div className="p-8 sm:p-10">
-                                    <div className="flex items-start justify-between gap-4 mb-8">
+                            <div key={territory.id} className={`group bg-white rounded-[2rem] border transition-all hover:shadow-xl ${territory.workedOn ? 'border-emerald-100 bg-emerald-50/5' : 'border-slate-300'}`}>
+                                <div className="p-8">
+                                    <div className="flex items-start justify-between gap-4 mb-6">
                                         <div className="flex items-center gap-5">
                                             <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-3xl font-black shrink-0 shadow-inner ${isOverdue ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
                                                 {mapNumber}
@@ -421,7 +443,7 @@ const PublisherDashboard: React.FC = () => {
                                     )}
 
                                     {territory.permanentNotes && (
-                                        <div className="mb-8 p-6 bg-amber-50/40 border border-amber-100 rounded-[2rem] relative overflow-hidden">
+                                        <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded relative overflow-hidden">
                                             <div className="absolute top-0 right-0 p-4 opacity-10">
                                                 <svg className="w-12 h-12 text-amber-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
                                             </div>
@@ -433,7 +455,7 @@ const PublisherDashboard: React.FC = () => {
                                     )}
 
                                     {territory.history && territory.history.length > 0 && territory.history.some(h => h.notes) && (
-                                        <div className="mb-8 p-6 bg-blue-50/30 border border-blue-100/50 rounded-[2rem]">
+                                        <div className="mb-4 p-4 bg-blue-50/20 border border-blue-100 rounded">
                                             <h4 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600 mb-4">
                                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                                 Últimas Observações
@@ -444,7 +466,7 @@ const PublisherDashboard: React.FC = () => {
                                                     .slice(-2)
                                                     .reverse()
                                                     .map((h, i) => (
-                                                        <div key={i} className="bg-white/60 p-4 rounded-2xl border border-blue-50">
+                                                        <div key={i} className="bg-white p-3 rounded border border-gray-150">
                                                             <div className="flex justify-between items-center mb-1">
                                                                 <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest">{h.publisherName}</p>
                                                                 <p className="text-[9px] font-bold text-slate-400">{formatDate(h.date)}</p>
@@ -456,54 +478,49 @@ const PublisherDashboard: React.FC = () => {
                                         </div>
                                     )}
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                        <button onClick={() => window.open(territory.pdfUrl, '_blank')} className="flex flex-col items-center justify-center gap-4 py-10 bg-gray-900 text-white rounded-[3rem] hover:bg-black transition-all transform active:scale-95 shadow-2xl">
-                                            <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                            <span className="text-sm font-black uppercase tracking-widest">Ver Mapa</span>
-                                        </button>
-                                        <button onClick={() => handleShareDirect(territory)} className="flex flex-col items-center justify-center gap-4 py-10 bg-blue-600 text-white rounded-[3rem] hover:bg-blue-700 transition-all transform active:scale-95 shadow-2xl shadow-blue-100">
-                                            <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                                            <span className="text-sm font-black uppercase tracking-widest">Enviar</span>
-                                        </button>
-                                        <button 
-                                            onClick={() => handleReversal(territory)}
-                                            className="flex flex-col items-center justify-center gap-4 py-10 bg-amber-100 text-amber-700 rounded-[3rem] hover:bg-amber-200 transition-all transform active:scale-95 shadow-lg"
-                                        >
-                                            <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-                                            <span className="text-sm font-black uppercase tracking-widest">Estornar</span>
-                                        </button>
-                                        <button onClick={() => setReportingTerritory(territory)} className="flex flex-col items-center justify-center gap-4 py-10 bg-emerald-600 text-white rounded-[3rem] hover:bg-emerald-700 transition-all transform active:scale-95 shadow-2xl shadow-emerald-100">
-                                            <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                                            <span className="text-sm font-black uppercase tracking-widest">Concluir</span>
-                                        </button>
-                                    </div>
+                                     <div className="grid grid-cols-2 gap-2 mt-4">
+                                         <button onClick={() => window.open(territory.pdfUrl, '_blank')} className="flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-800 text-white rounded hover:bg-black transition-all text-xs font-semibold shadow-sm">
+                                             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                             <span className="text-[10px] font-black uppercase tracking-widest">Ver Mapa</span>
+                                         </button>
+                                         <button onClick={() => handleShareDirect(territory)} className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition-all text-xs font-semibold shadow-sm animate-none">
+                                             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                                             <span className="text-[10px] font-black uppercase tracking-widest">Enviar</span>
+                                         </button>
+                                         <button 
+                                             onClick={() => handleReversal(territory)}
+                                             className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-amber-50 text-amber-800 rounded border border-amber-250 hover:bg-amber-100 transition-all text-xs font-semibold"
+                                         >
+                                             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                                             <span className="text-[10px] font-black uppercase tracking-widest">Estornar</span>
+                                         </button>
+                                         <button onClick={() => setReportingTerritory(territory)} className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-all text-xs font-semibold shadow-sm">
+                                             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                             <span className="text-[10px] font-black uppercase tracking-widest">Concluir</span>
+                                         </button>
+                                     </div>
                                 </div>
                             </div>
                         );
                     })}
                 </div>
-            ) : hasPendingRequest ? (
-                <div className="bg-white p-12 rounded-[3rem] text-center border-2 border-blue-50 shadow-xl shadow-gray-100/50">
-                    <div className="inline-flex items-center justify-center w-24 h-24 bg-blue-50 text-blue-600 rounded-full mb-8">
-                        <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </div>
-                    <h3 className="text-3xl font-black text-gray-900">Pedido em Análise</h3>
-                    <p className="text-gray-500 mt-4 font-medium max-w-sm mx-auto leading-relaxed">Sua solicitação está na fila. O administrador irá atribuir novos mapas para você em breve.</p>
-                </div>
             ) : (
-                <div className="bg-gray-50 p-16 rounded-[3rem] text-center border-4 border-dashed border-gray-200">
-                    <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-8 text-gray-400">
-                        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+                <div className="bg-white p-10 rounded-[2rem] text-center border border-gray-250 shadow-md max-w-lg mx-auto py-12">
+                    <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 text-slate-400">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
                     </div>
-                    <h3 className="text-3xl font-black text-gray-800 mb-4">Tudo pronto para começar?</h3>
-                    <p className="text-gray-500 mb-12 max-w-md mx-auto font-medium leading-relaxed">Você não tem nenhum mapa no momento. Clique no botão abaixo para pedir territórios para trabalhar.</p>
-                    <button
-                        onClick={handleRequest}
-                        disabled={actionLoading}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-black py-6 px-16 rounded-[2rem] transition-all transform active:scale-95 disabled:bg-gray-300 shadow-2xl shadow-blue-200 text-xl uppercase tracking-widest"
-                    >
-                        {actionLoading ? 'ENVIANDO...' : 'SOLICITAR MAPAS'}
-                    </button>
+                    <h3 className="text-xl font-bold text-gray-800 mb-2 font-sans">Nenhum território no momento</h3>
+                    <p className="text-gray-500 mb-8 max-w-sm mx-auto text-xs font-semibold leading-relaxed">
+                        Você não possui nenhum território associado à sua conta no momento. Vá para a aba "Pedir" para solicitar.
+                    </p>
+                    {setActiveTab && (
+                        <button
+                            onClick={() => setActiveTab('request')}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-8 rounded-xl transition-all text-xs tracking-wider uppercase shadow-md shadow-blue-500/10"
+                        >
+                            Ir para Solicitações
+                        </button>
+                    )}
                 </div>
             )}
         </div>
