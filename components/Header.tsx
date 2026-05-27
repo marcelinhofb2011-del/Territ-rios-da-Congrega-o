@@ -81,9 +81,9 @@ const Header: React.FC = () => {
               aria-label="Abrir Menu"
             >
               <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <line x1="4" y1="6" x2="20" y2="6" className="text-blue-600 stroke-blue-600" />
-                <line x1="4" y1="12" x2="14" y2="12" />
-                <line x1="4" y1="18" x2="18" y2="18" />
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="18" x2="20" y2="18" />
               </svg>
             </button>
           )}

@@ -8,14 +8,21 @@ interface EditAssignmentDatesModalProps {
     onSuccess: () => void;
 }
 
+const toLocalInputDate = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const EditAssignmentDatesModal: React.FC<EditAssignmentDatesModalProps> = ({ territory, onClose, onSuccess }) => {
     const [assignmentDate, setAssignmentDate] = useState(() => {
         const d = territory.assignmentDate || new Date();
-        return d.toISOString().split('T')[0];
+        return toLocalInputDate(d);
     });
     const [dueDate, setDueDate] = useState(() => {
         const d = territory.dueDate || new Date();
-        return d.toISOString().split('T')[0];
+        return toLocalInputDate(d);
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');

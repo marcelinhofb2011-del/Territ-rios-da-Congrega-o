@@ -92,6 +92,19 @@ const PublisherDashboard: React.FC<PublisherDashboardProps> = ({ activeTab, setA
         };
     }, [user]);
 
+    // Prevent body scroll when modals are active
+    useEffect(() => {
+        const shouldLock = !!reportingTerritory || !!historyTerritory || !!viewingMap;
+        if (shouldLock) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [reportingTerritory, historyTerritory, viewingMap]);
+
     const handleRequest = async () => {
         if (!user || actionLoading) return;
         setActionLoading(true);

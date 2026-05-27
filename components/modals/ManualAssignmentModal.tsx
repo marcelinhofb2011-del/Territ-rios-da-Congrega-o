@@ -10,14 +10,21 @@ interface ManualAssignmentModalProps {
     initialUserId?: string;
 }
 
+const toLocalInputDate = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const ManualAssignmentModal: React.FC<ManualAssignmentModalProps> = ({ territories, users, onClose, onSuccess, initialUserId }) => {
     const [selectedUserId, setSelectedUserId] = useState(initialUserId || '');
     const [selectedTerritoryIds, setSelectedTerritoryIds] = useState<string[]>([]);
-    const [assignmentDate, setAssignmentDate] = useState(new Date().toISOString().split('T')[0]);
+    const [assignmentDate, setAssignmentDate] = useState(() => toLocalInputDate(new Date()));
     const [dueDate, setDueDate] = useState(() => {
         const d = new Date();
         d.setDate(d.getDate() + 30);
-        return d.toISOString().split('T')[0];
+        return toLocalInputDate(d);
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');

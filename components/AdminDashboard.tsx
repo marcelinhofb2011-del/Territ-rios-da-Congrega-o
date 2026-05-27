@@ -35,6 +35,13 @@ interface AdminDashboardProps {
     setActiveTab?: (tab: 'dashboard' | 'available' | 'in_use' | 'history' | 'users' | 'stats' | 'settings') => void;
 }
 
+const toLocalInputDate = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTab, setActiveTab: propSetActiveTab }) => {
     const { user } = useAuth();
     const [territories, setTerritories] = useState<Territory[]>([]);
@@ -99,7 +106,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
     const [requestDueDate, setRequestDueDate] = useState<string>(() => {
         const d = new Date();
         d.setDate(d.getDate() + 30);
-        return d.toISOString().split('T')[0];
+        return toLocalInputDate(d);
     });
     const [selectedMapsForRequest, setSelectedMapsForRequest] = useState<string[]>([]);
     const [showManualAssignModal, setShowManualAssignModal] = useState(false);
@@ -158,6 +165,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
         window.addEventListener('open-admin-sidebar', handleOpenSidebar);
         return () => window.removeEventListener('open-admin-sidebar', handleOpenSidebar);
     }, []);
+
+    // Prevent body scroll when sidebar or modals are active
+    useEffect(() => {
+        const shouldLock = isSidebarOpen || showAddModal || !!editingTerritory || showManualAssignModal || !!editingAssignment || !!viewHistory || !!viewingMap || !!fulfillingRequestId;
+        if (shouldLock) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [isSidebarOpen, showAddModal, editingTerritory, showManualAssignModal, editingAssignment, viewHistory, viewingMap, fulfillingRequestId]);
 
     useEffect(() => {
         if (user) {
@@ -717,7 +737,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                             onReset={handleResetTerritory}
                                             onComplete={handleCompleteTerritory}
                                             onDelete={handleDeleteTerritory}
-                                            onViewMap={setViewingMap}
+                                            onViewMap={(t) => window.open(t.pdfUrl, '_blank')}
                                         />
                                     )) : (
                                         <div className="col-span-full py-32 border-2 border-dashed border-slate-100 rounded-[3rem] flex items-center justify-center">
@@ -739,7 +759,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                             onReset={handleResetTerritory}
                                             onComplete={handleCompleteTerritory}
                                             onDelete={handleDeleteTerritory}
-                                            onViewMap={setViewingMap}
+                                            onViewMap={(t) => window.open(t.pdfUrl, '_blank')}
                                         />
                                     )) : (
                                         <div className="col-span-full py-32 border-2 border-dashed border-slate-100 rounded-[3rem] flex items-center justify-center">
