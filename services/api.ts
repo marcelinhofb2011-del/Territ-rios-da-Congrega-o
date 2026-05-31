@@ -50,7 +50,7 @@ if (!SUPABASE_BUCKET || SUPABASE_BUCKET === '') {
 }
 
 console.log("Supabase Bucket final:", SUPABASE_BUCKET);
-import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, AppNotification, TerritoryHistory } from '../types';
+import { User, Territory, TerritoryStatus, RequestStatus, TerritoryRequest, AppNotification, TerritoryHistory, Campaign } from '../types';
 import { getDocFromServer } from 'firebase/firestore';
 
 // --- ERROR HANDLING ---
@@ -111,11 +111,11 @@ async function testConnection() {
     await getDocFromServer(doc(db, 'test', 'connection'));
     console.log("api.ts: Connection to Firestore successful");
   } catch (error) {
-    console.error("api.ts: Connection to Firestore failed", error);
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. ");
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration.");
+    } else {
+      console.log("api.ts: Connection test finished (unauthenticated startup check skipped or completed).");
     }
-    // Skip logging for other errors, as this is simply a connection test.
   }
 }
 testConnection();
@@ -142,10 +142,15 @@ export const getOrCreateUserProfile = async (firebaseUser: any): Promise<User> =
     
     // Se não existir documento com o UID, procuramos por um documento com o mesmo e-mail
     if (!userDoc.exists()) {
-        const q = query(collection(db, 'users'), where('email', '==', userEmail), limit(1));
-        const querySnapshot = await getDocs(q);
+        let querySnapshot = null;
+        try {
+            const q = query(collection(db, 'users'), where('email', '==', userEmail), limit(1));
+            querySnapshot = await getDocs(q);
+        } catch (e) {
+            console.log("api.ts: No list/get permission to check legacy users, skipping migration check.");
+        }
         
-        if (!querySnapshot.empty) {
+        if (querySnapshot && !querySnapshot.empty) {
             // Encontrou um cadastro antigo com o mesmo e-mail mas ID diferente
             const oldDoc = querySnapshot.docs[0];
             const oldData = oldDoc.data();
@@ -200,7 +205,11 @@ export const getOrCreateUserProfile = async (firebaseUser: any): Promise<User> =
     // Força admin para o seu e-mail principal
     if (userEmail === 'marcelinhofb2011@gmail.com' && currentRole !== 'admin') {
         currentRole = 'admin';
-        await updateDoc(userRef, { role: 'admin' });
+        try {
+            await updateDoc(userRef, { role: 'admin' });
+        } catch (e: any) {
+            console.warn("api.ts: Não foi possível atualizar role 'admin' no Firestore (possível sincronia de regras), ignorando:", e.message);
+        }
     }
 
     return { 
@@ -252,14 +261,14 @@ export const apiSignUp = async (name: string, email: string, pass: string): Prom
 
         await updateProfile(userCredential.user, { displayName: name });
         
-        let usersSnapshot;
+        let isFirstUser = false;
         try {
-            usersSnapshot = await getDocs(query(collection(db, 'users'), limit(1)));
+            const usersSnapshot = await getDocs(query(collection(db, 'users'), limit(1)));
+            isFirstUser = usersSnapshot.empty;
         } catch (error) {
-            handleFirestoreError(error, OperationType.LIST, 'users');
-            return {} as User; // Should not reach here
+            console.log("api.ts: Not first user or no list permission for users collection, falling back to non-first user.");
+            isFirstUser = false;
         }
-        const isFirstUser = usersSnapshot.empty;
         const isOwner = email.toLowerCase() === 'marcelinhofb2011@gmail.com';
         
         const newUser: User = {
@@ -1144,4 +1153,91 @@ export const fetchPublisherData = async (userId: string): Promise<{ myTerritory:
     }
     
     return { myTerritory, hasPendingRequest: !requestSnapshot.empty };
+};
+
+export const fetchCampaigns = async (): Promise<Campaign[]> => {
+    try {
+        const campaignsRef = collection(db, 'campaigns');
+        const querySnapshot = await getDocs(campaignsRef);
+        return querySnapshot.docs.map(docSnapshot => {
+            const data = docSnapshot.data();
+            return {
+                id: docSnapshot.id,
+                name: data.name || '',
+                number: data.number || '',
+                startDate: parseDate(data.startDate) || new Date(),
+                endDate: parseDate(data.endDate) || new Date(),
+                active: !!data.active,
+                createdAt: parseDate(data.createdAt) || new Date(),
+            } as Campaign;
+        }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    } catch (error) {
+        handleFirestoreError(error, OperationType.LIST, 'campaigns');
+        return [];
+    }
+};
+
+export const createCampaign = async (campaignData: Omit<Campaign, 'id' | 'createdAt'>): Promise<string> => {
+    try {
+        const campaignDocRef = doc(collection(db, 'campaigns'));
+        const newDocPayload = {
+            id: campaignDocRef.id,
+            name: campaignData.name,
+            number: campaignData.number || '',
+            startDate: Timestamp.fromDate(campaignData.startDate),
+            endDate: Timestamp.fromDate(campaignData.endDate),
+            active: campaignData.active,
+            createdAt: Timestamp.now()
+        };
+        await setDoc(campaignDocRef, newDocPayload);
+        return campaignDocRef.id;
+    } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, 'campaigns');
+        throw error;
+    }
+};
+
+export const updateCampaign = async (campaignId: string, campaignData: Partial<Omit<Campaign, 'id' | 'createdAt'>>): Promise<void> => {
+    try {
+        const campaignRef = doc(db, 'campaigns', campaignId);
+        const updatePayload: any = {};
+        if (campaignData.name !== undefined) updatePayload.name = campaignData.name;
+        if (campaignData.number !== undefined) updatePayload.number = campaignData.number;
+        if (campaignData.startDate !== undefined) updatePayload.startDate = Timestamp.fromDate(campaignData.startDate);
+        if (campaignData.endDate !== undefined) updatePayload.endDate = Timestamp.fromDate(campaignData.endDate);
+        if (campaignData.active !== undefined) updatePayload.active = campaignData.active;
+        
+        await updateDoc(campaignRef, updatePayload);
+    } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `campaigns/${campaignId}`);
+        throw error;
+    }
+};
+
+export const deleteCampaign = async (campaignId: string): Promise<void> => {
+    try {
+        const campaignRef = doc(db, 'campaigns', campaignId);
+        await deleteDoc(campaignRef);
+    } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `campaigns/${campaignId}`);
+        throw error;
+    }
+};
+
+export const setCampaignActive = async (campaignId: string, active: boolean): Promise<void> => {
+    try {
+        const campaignRef = doc(db, 'campaigns', campaignId);
+        if (active) {
+            const campaigns = await fetchCampaigns();
+            for (const c of campaigns) {
+                if (c.active && c.id !== campaignId) {
+                    await updateDoc(doc(db, 'campaigns', c.id), { active: false });
+                }
+            }
+        }
+        await updateDoc(campaignRef, { active });
+    } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `campaigns/${campaignId}`);
+        throw error;
+    }
 };

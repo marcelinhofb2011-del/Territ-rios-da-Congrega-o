@@ -69,3 +69,13 @@ export interface AppNotification {
   read: boolean;
   createdAt: Date;
 }
+
+export interface Campaign {
+  id: string;
+  name: string;
+  number?: string;
+  startDate: Date;
+  endDate: Date;
+  active: boolean;
+  createdAt: Date;
+}

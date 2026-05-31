@@ -11,16 +11,28 @@ interface TerritoryCardProps {
 }
 
 const TerritoryCard: React.FC<TerritoryCardProps> = ({ territory, onEdit, onReset, onComplete, onDelete, onViewMap }) => {
-    const formatDate = (date: Date | undefined | null) => {
-        if (!date) return 'Nunca';
-        return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+    const parseDateLocal = (d: any): Date | null => {
+        if (!d) return null;
+        if (d instanceof Date) return d;
+        if (typeof d.toDate === 'function') return d.toDate();
+        if (typeof d === 'object' && typeof d.seconds === 'number') {
+            return new Date(d.seconds * 1000);
+        }
+        const parsed = new Date(d);
+        return isNaN(parsed.getTime()) ? null : parsed;
     };
 
-    const getDaysRemaining = (availableAt: Date | null | undefined) => {
-        if (!availableAt) return 0;
+    const formatDate = (date: any) => {
+        const d = parseDateLocal(date);
+        if (!d) return 'Nunca';
+        return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+    };
+
+    const getDaysRemaining = (availableAt: any) => {
+        const target = parseDateLocal(availableAt);
+        if (!target) return 0;
         const now = new Date();
         now.setHours(0, 0, 0, 0);
-        const target = new Date(availableAt);
         target.setHours(0, 0, 0, 0);
         const diffTime = target.getTime() - now.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -30,20 +42,20 @@ const TerritoryCard: React.FC<TerritoryCardProps> = ({ territory, onEdit, onRese
     const getStatusColor = () => {
         if (territory.status === 'em_uso' || territory.status === 'in_use') return 'bg-blue-50 text-blue-600 border-blue-100';
         if (territory.status === 'disponivel' || territory.status === 'available') return 'bg-emerald-50 text-emerald-600 border-emerald-100';
-        if (territory.status === 'descanso') return 'bg-amber-50 text-amber-600 border-amber-100';
+        if (territory.status === 'descanso' || territory.status === 'resting') return 'bg-amber-50 text-amber-600 border-amber-100';
         return 'bg-slate-50 text-slate-500 border-slate-100';
     };
 
     const getStatusLabel = () => {
         if (territory.status === 'em_uso' || territory.status === 'in_use') return 'Atribuído';
         if (territory.status === 'disponivel' || territory.status === 'available') return 'Disponível';
-        if (territory.status === 'descanso') return 'Em Descanso';
+        if (territory.status === 'descanso' || territory.status === 'resting') return 'Em Descanso';
         return 'Outro';
     };
 
     const isAvailable = territory.status === 'disponivel' || territory.status === 'available';
     const isInUse = territory.status === 'em_uso' || territory.status === 'in_use';
-    const isResting = territory.status === 'descanso';
+    const isResting = territory.status === 'descanso' || territory.status === 'resting';
 
     return (
         <div className="group p-5 bg-white border border-gray-200 rounded shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between gap-4 relative">

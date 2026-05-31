@@ -74,6 +74,21 @@
         "read": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "Campaign": {
+      "title": "Campaign",
+      "description": "Preaching campaign.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "number": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "startDate", "endDate", "active", "createdAt"]
     }
   },
   "firestore": {
@@ -92,6 +107,10 @@
     "/notifications/{notificationId}": {
       "schema": "AppNotification",
       "description": "User notifications."
+    },
+    "/campaigns/{campaignId}": {
+      "schema": "Campaign",
+      "description": "Congregation campaigns."
     }
   }
 }

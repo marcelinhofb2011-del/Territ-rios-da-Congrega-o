@@ -11,7 +11,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
-  const [activeTab, setActiveTab] = React.useState<'dashboard' | 'available' | 'in_use' | 'history' | 'users' | 'stats' | 'settings' | 'home' | 'request'>('dashboard');
+  const [activeTab, setActiveTab] = React.useState<'dashboard' | 'available' | 'in_use' | 'history' | 'users' | 'stats' | 'settings' | 'home' | 'request' | 'campaigns'>('dashboard');
   usePushNotifications(user);
 
   // Reset tab strictly to 'dashboard' when the user changes or logs in

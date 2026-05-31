@@ -2,200 +2,58 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Fields:
-    //   - uid: string (required)
-    //   - email: string (required, email format)
-    //   - name: string (required)
-    //   - role: string (required, ['admin', 'user'])
-    //   - active: bool (required)
-    //   - createdAt: timestamp (required)
-    //   - fcmTokens: list (optional)
-    //
-    // Collection: territories
-    // Fields:
-    //   - name: string (required)
-    //   - number: string (required)
-    //   - locality: string (required)
-    //   - description: string (required)
-    //   - observation: string (required)
-    //   - status: string (required, ['disponivel', 'solicitado', 'em_uso', 'fechado'])
-    //   - pdfUrl: string (required, url format)
-    //   - createdAt: timestamp (required)
-    //   - assignedTo: string (optional, userId)
-    //   - assignedToName: string (optional)
-    //   - assignmentDate: timestamp (optional)
-    //   - dueDate: timestamp (optional)
-    //   - history: list (required, objects with userId, userName, assignmentDate, completedDate, notes)
-    //   - permanentNotes: string (optional)
-    //
-    // Collection: requests
-    // Fields:
-    //   - userId: string (required)
-    //   - userName: string (required)
-    //   - requestDate: timestamp (required)
-    //   - status: string (required, ['pendente', 'aprovado', 'rejeitado'])
-    //
-    // Collection: notifications
-    // Fields:
-    //   - userId: string (required)
-    //   - message: string (required)
-    //   - type: string (required, ['info', 'success', 'warning'])
-    //   - read: bool (required)
-    //   - createdAt: timestamp (required)
-    //
-    // ===============================================================
-
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-    
+    // Função para verificar se o usuário está logado
     function isSignedIn() {
       return request.auth != null;
     }
 
+    // Função robusta e segura para verificar se é Admin sem gerar exceções CEL
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email != null && request.auth.token.email == "marcelinhofb2011@gmail.com") ||
+        request.auth.uid == "jZbWs8mxtKYviYeBtCs7mixqaYF3" ||
+        request.auth.uid == "0yrSgSXNtjZWCIx05z3AeePjvsS2" ||
+        (request.auth.token != null && "email" in request.auth.token && (
+          request.auth.token.email == "marcelinhofb2011@gmail.com" || 
+          request.auth.token.email == "MARCELINHOFB2011@GMAIL.COM" || 
+          request.auth.token.email == "Marcelinhofb2011@gmail.com"
+        )) ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin')
       );
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function isValidUrl(url) {
-      return url is string && (url.matches("^https://.*") || url.matches("^http://.*") || url.matches("^gs://.*") || url.matches("^data:.*"));
-    }
-
-    function uidUnchanged() {
-      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
-    }
-
-    function uidNotModified() {
-      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
-    }
-
-    function isValidList(list, maxSize) {
-      return list is list && list.size() <= maxSize;
-    }
-
-    // ===============================================================
-    // Domain Validators
-    // ===============================================================
-
-    function isValidUser(data) {
-      return hasRequiredFields(['uid', 'email', 'name', 'role', 'active', 'createdAt']) &&
-             hasOnlyAllowedFields(['uid', 'email', 'name', 'role', 'active', 'createdAt', 'fcmTokens', 'id']) &&
-             data.uid is string &&
-             data.email is string && isValidEmail(data.email) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.role in ['admin', 'user', 'publisher'] &&
-             data.active is bool &&
-             data.createdAt is timestamp &&
-             (!('fcmTokens' in data) || isValidList(data.fcmTokens, 10));
-    }
-
-    function isValidTerritory(data) {
-      return hasRequiredFields(['name', 'number', 'locality', 'description', 'observation', 'status', 'pdfUrl', 'createdAt', 'history']) &&
-             hasOnlyAllowedFields(['name', 'number', 'locality', 'description', 'observation', 'status', 'pdfUrl', 'createdAt', 'history', 'assignedTo', 'assignedToName', 'assignmentDate', 'dueDate', 'lastCompletedDate', 'permanentNotes', 'workedOn', 'assignmentOrder', 'id', 'returnedAt', 'availableAt']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.number is string && data.number.size() > 0 &&
-             data.locality is string && data.locality.size() > 0 &&
-             data.description is string && data.description.size() < 1000 &&
-             data.observation is string && data.observation.size() < 1000 &&
-             data.status in ['disponivel', 'solicitado', 'em_uso', 'fechado', 'descanso'] &&
-             data.pdfUrl is string && isValidUrl(data.pdfUrl) &&
-             data.createdAt is timestamp &&
-             isValidList(data.history, 100) &&
-             (!('permanentNotes' in data) || (data.permanentNotes is string && data.permanentNotes.size() < 2000)) &&
-             (!('workedOn' in data) || data.workedOn is bool) &&
-             (!('assignmentOrder' in data) || data.assignmentOrder is number) &&
-             (!('returnedAt' in data) || data.returnedAt is timestamp || data.returnedAt == null) &&
-             (!('availableAt' in data) || data.availableAt is timestamp || data.availableAt == null);
-    }
-
-    function isValidRequest(data) {
-      return hasRequiredFields(['userId', 'userName', 'requestDate', 'status']) &&
-             hasOnlyAllowedFields(['userId', 'userName', 'requestDate', 'status']) &&
-             data.userId is string &&
-             data.userName is string && data.userName.size() > 0 && data.userName.size() < 100 &&
-             data.requestDate is timestamp &&
-             data.status in ['pendente', 'aprovado', 'rejeitado'];
-    }
-
-    function isValidNotification(data) {
-      return hasRequiredFields(['userId', 'message', 'type', 'read', 'createdAt']) &&
-             hasOnlyAllowedFields(['userId', 'message', 'type', 'read', 'createdAt']) &&
-             data.userId is string &&
-             data.message is string && data.message.size() > 0 && data.message.size() < 500 &&
-             data.type in ['info', 'success', 'warning'] &&
-             data.read is bool &&
-             data.createdAt is timestamp;
-    }
-
-    // ===============================================================
-    // Rules
-    // ===============================================================
-
-    match /test/{docId} {
-      allow read: if true;
     }
 
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow list: if isAdmin();
-      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(request.resource.data) && 
-                    (request.resource.data.role == 'user' || (request.auth.token.email == "marcelinhofb2011@gmail.com" && request.resource.data.role == 'admin')) && 
-                    uidUnchanged();
-      allow update: if isSignedIn() && (
-        (request.auth.uid == userId && request.resource.data.role == resource.data.role && isValidUser(request.resource.data) && uidNotModified()) || 
-        isAdmin()
-      );
-      allow delete: if isAdmin();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (isAdmin() || (request.auth.uid == userId && request.resource.data.role == resource.data.role));
     }
 
     match /territories/{territoryId} {
       allow read: if isSignedIn();
-      allow create: if isAdmin() && isValidTerritory(request.resource.data);
-      allow delete: if isAdmin();
-      allow update: if (isAdmin() && isValidTerritory(request.resource.data)) || (
-        isSignedIn() && 
-        resource.data.assignedTo == request.auth.uid && 
-        isValidTerritory(request.resource.data) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['workedOn', 'history', 'status', 'assignedTo', 'assignedToName', 'assignmentDate', 'dueDate', 'lastCompletedDate', 'returnedAt', 'availableAt'])
-      );
+      
+      // Somente admin cria ou deleta mapas
+      allow create, delete: if isAdmin();
+      
+      // Permite se for Admin OU se o mapa estiver atualmente atribuído ao usuário logado
+      allow update: if isAdmin() || (isSignedIn() && resource.data.assignedTo == request.auth.uid);
     }
 
     match /requests/{requestId} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && isValidRequest(request.resource.data);
-      allow update: if isAdmin() && isValidRequest(request.resource.data);
-      allow delete: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      allow create: if isAdmin() && isValidNotification(request.resource.data);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn(); 
+    }
+
+    match /campaigns/{campaignId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
   }
 }

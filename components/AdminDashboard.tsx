@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus } from '../types';
+import { Territory, TerritoryRequest, TerritoryStatus, User, RequestStatus, Campaign } from '../types';
 import { 
     assignTerritoryToRequest, rejectRequest, 
     updateTerritory, deleteTerritory, updateUserRole, adminResetTerritory, adminCompleteTerritory,
-    parseDate, hydrateHistory
+    parseDate, hydrateHistory,
+    fetchCampaigns, createCampaign, updateCampaign, deleteCampaign, setCampaignActive
 } from '../services/api';
 import { formatDate, getDaysRemaining } from '../utils/helpers';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import MapViewerModal from './modals/MapViewerModal';
 import TerritoryHistoryModal from './modals/TerritoryHistoryModal';
@@ -31,8 +32,8 @@ const FilterIcon: React.FC = () => (
 );
 
 interface AdminDashboardProps {
-    activeTab?: 'dashboard' | 'available' | 'in_use' | 'history' | 'users' | 'stats' | 'settings';
-    setActiveTab?: (tab: 'dashboard' | 'available' | 'in_use' | 'history' | 'users' | 'stats' | 'settings') => void;
+    activeTab?: 'dashboard' | 'available' | 'in_use' | 'resting' | 'history' | 'users' | 'stats' | 'settings' | 'campaigns';
+    setActiveTab?: (tab: 'dashboard' | 'available' | 'in_use' | 'resting' | 'history' | 'users' | 'stats' | 'settings' | 'campaigns') => void;
 }
 
 const toLocalInputDate = (d: Date) => {
@@ -121,6 +122,64 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
     } | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+    const renderErrorDetail = (msg: string | null) => {
+        if (!msg) return null;
+        let isJson = false;
+        let parsed: any = null;
+        try {
+            if (msg.trim().startsWith('{') && msg.trim().endsWith('}')) {
+                parsed = JSON.parse(msg);
+                isJson = true;
+            }
+        } catch (e) {
+            isJson = false;
+        }
+
+        if (isJson && parsed) {
+            const errorText = parsed.error || "Erro de permissão ou de validação.";
+            const pathText = parsed.path ? `Caminho: ${parsed.path}` : null;
+            const opText = parsed.operationType ? `Operação: ${parsed.operationType.toUpperCase()}` : null;
+            const userEmailText = parsed.authInfo?.email ? `E-mail: ${parsed.authInfo.email}` : null;
+
+            return (
+                <div className="flex flex-col gap-2 max-w-full text-slate-100">
+                    <span className="font-extrabold text-[10px] uppercase tracking-wider text-rose-300">Erro do Banco de Dados</span>
+                    <p className="text-sm font-semibold leading-relaxed break-words">{errorText}</p>
+                    <div className="mt-2 pt-2 border-t border-rose-800/40 flex flex-col gap-1 font-mono text-[10px] text-rose-200/90 bg-black/20 p-2 rounded-xl">
+                        {pathText && <div className="truncate">{pathText}</div>}
+                        {opText && <div className="truncate">{opText}</div>}
+                        {userEmailText && <div className="truncate">{userEmailText}</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="max-w-full text-slate-100">
+                <p className="text-sm font-semibold leading-relaxed break-words">{msg}</p>
+            </div>
+        );
+    };
+
+
+
+    // Campaigns States
+    const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+    const [loadingCampaigns, setLoadingCampaigns] = useState(true);
+    const [showAddCampaignModal, setShowAddCampaignModal] = useState(false);
+    const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+    const [campaignName, setCampaignName] = useState('');
+    const [campaignNumber, setCampaignNumber] = useState('');
+    const [campaignStartDate, setCampaignStartDate] = useState(() => toLocalInputDate(new Date()));
+    const [campaignEndDate, setCampaignEndDate] = useState(() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 30);
+        return toLocalInputDate(d);
+    });
+    const [campaignActive, setCampaignActiveState] = useState(false);
+    const [selectedCampaignForReport, setSelectedCampaignForReport] = useState<Campaign | null>(null);
+    const [comparingCampaignIds, setComparingCampaignIds] = useState<string[]>([]);
+
     // Statistics Data
     const stats = useMemo(() => {
         const total = territories.length;
@@ -168,7 +227,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
 
     // Prevent body scroll when sidebar or modals are active
     useEffect(() => {
-        const shouldLock = isSidebarOpen || showAddModal || !!editingTerritory || showManualAssignModal || !!editingAssignment || !!viewHistory || !!viewingMap || !!fulfillingRequestId;
+        const shouldLock = isSidebarOpen || showAddModal || !!editingTerritory || showManualAssignModal || !!editingAssignment || !!viewHistory || !!viewingMap || !!fulfillingRequestId || showAddCampaignModal;
         if (shouldLock) {
             document.body.style.overflow = 'hidden';
         } else {
@@ -177,26 +236,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
         return () => {
             document.body.style.overflow = '';
         };
-    }, [isSidebarOpen, showAddModal, editingTerritory, showManualAssignModal, editingAssignment, viewHistory, viewingMap, fulfillingRequestId]);
+    }, [isSidebarOpen, showAddModal, editingTerritory, showManualAssignModal, editingAssignment, viewHistory, viewingMap, fulfillingRequestId, showAddCampaignModal]);
 
     useEffect(() => {
-        if (user) {
-            console.log("AdminDashboard: Current user role:", user.role);
-        }
+        if (!user) return;
+        
+        console.log("AdminDashboard: Current user role:", user.role);
         const territoriesQuery = query(collection(db, 'territories'));
         const unsubscribeTerritories = onSnapshot(territoriesQuery, (snapshot) => {
-            const territoriesList = snapshot.docs.map(doc => {
-                const data = doc.data();
+            const territoriesList = snapshot.docs.map(docSnapshot => {
+                const data = docSnapshot.data();
                 const history = hydrateHistory(data.history || []);
+                const returnedAt = parseDate(data.returnedAt);
+                const availableAt = parseDate(data.availableAt);
+                let status = data.status as TerritoryStatus;
+
+                // Verificação automática de liberação:
+                const now = new Date();
+                if (status === TerritoryStatus.RESTING && availableAt && now >= availableAt) {
+                    status = TerritoryStatus.AVAILABLE;
+                    updateDoc(doc(db, 'territories', docSnapshot.id), { status: TerritoryStatus.AVAILABLE })
+                        .catch(err => console.error("Error auto-releasing territory:", err));
+                }
 
                 return {
                     ...data,
-                    id: doc.id,
+                    id: docSnapshot.id,
                     name: data.name || 'Sem Nome',
                     createdAt: parseDate(data.createdAt) || new Date(),
                     assignmentDate: parseDate(data.assignmentDate),
                     dueDate: parseDate(data.dueDate),
                     lastCompletedDate: parseDate(data.lastCompletedDate),
+                    returnedAt,
+                    availableAt,
+                    status,
                     history: history
                 } as Territory;
             });
@@ -243,14 +316,191 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
             console.error("Erro no listener de solicitações:", err);
         });
 
+        const campaignsQuery = query(collection(db, 'campaigns'));
+        const unsubscribeCampaigns = onSnapshot(campaignsQuery, (snapshot) => {
+            const list = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    name: data.name || '',
+                    number: data.number || '',
+                    startDate: parseDate(data.startDate) || new Date(),
+                    endDate: parseDate(data.endDate) || new Date(),
+                    active: !!data.active,
+                    createdAt: parseDate(data.createdAt) || new Date()
+                } as Campaign;
+            }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+            setCampaigns(list);
+            setLoadingCampaigns(false);
+
+            setSelectedCampaignForReport(prev => {
+                if (prev) {
+                    const found = list.find(c => c.id === prev.id);
+                    return found || list.find(c => c.active) || list[0] || null;
+                }
+                return list.find(c => c.active) || list[0] || null;
+            });
+        }, (err) => {
+            console.log("Aviso no listener de campanhas (pode ocorrer durante a sincronização inicial ou logout):", err.message);
+            setLoadingCampaigns(false);
+        });
+
         return () => {
             unsubscribeTerritories();
             unsubscribeUsers();
             unsubscribeRequests();
+            unsubscribeCampaigns();
         };
     }, [loading, user]);
-    
+
     // Handlers
+    // Campaigns Handlers
+    const handleSaveCampaign = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!campaignName || !campaignStartDate || !campaignEndDate) {
+            setErrorMsg("Preencha todos os campos obrigatórios.");
+            return;
+        }
+
+        try {
+            const startD = new Date(campaignStartDate + 'T00:00:00');
+            const endD = new Date(campaignEndDate + 'T23:59:59');
+
+            if (startD > endD) {
+                setErrorMsg("A data de término deve ser posterior à data de início.");
+                return;
+            }
+
+            if (editingCampaign) {
+                await updateCampaign(editingCampaign.id, {
+                    name: campaignName,
+                    number: campaignNumber,
+                    startDate: startD,
+                    endDate: endD,
+                    active: campaignActive
+                });
+                
+                if (campaignActive) {
+                    await setCampaignActive(editingCampaign.id, true);
+                }
+            } else {
+                const campId = await createCampaign({
+                    name: campaignName,
+                    number: campaignNumber,
+                    startDate: startD,
+                    endDate: endD,
+                    active: campaignActive
+                });
+                if (campaignActive) {
+                    await setCampaignActive(campId, true);
+                }
+            }
+            
+            setShowAddCampaignModal(false);
+            setEditingCampaign(null);
+            setCampaignName('');
+            setCampaignNumber('');
+            setCampaignStartDate(toLocalInputDate(new Date()));
+            setCampaignEndDate(() => {
+                const d = new Date();
+                d.setDate(d.getDate() + 30);
+                return toLocalInputDate(d);
+            });
+            setCampaignActiveState(false);
+        } catch (err: any) {
+            console.error("Erro ao salvar campanha:", err);
+            setErrorMsg(err.message || "Ocorreu um erro ao salvar a campanha.");
+        }
+    };
+
+    const handleEditCampaignClick = (camp: Campaign) => {
+        setEditingCampaign(camp);
+        setCampaignName(camp.name);
+        setCampaignNumber(camp.number || '');
+        setCampaignStartDate(toLocalInputDate(camp.startDate));
+        setCampaignEndDate(toLocalInputDate(camp.endDate));
+        setCampaignActiveState(camp.active);
+        setShowAddCampaignModal(true);
+    };
+
+    const handleDeleteCampaignClick = async (campId: string) => {
+        setConfirmAction({
+            title: "Excluir Campanha",
+            message: "Tem certeza que deseja excluir esta campanha? Todos os dados históricos continuarão salvos, mas as estatísticas agrupadas desta campanha serão removidas.",
+            isDanger: true,
+            onConfirm: async () => {
+                try {
+                    await deleteCampaign(campId);
+                    setConfirmAction(null);
+                } catch (err: any) {
+                    console.error("Erro ao deletar campanha:", err);
+                    setErrorMsg(err.message || "Erro ao excluir campanha.");
+                }
+            }
+        });
+    };
+
+    const handleToggleCampaignActiveStatus = async (camp: Campaign) => {
+        try {
+            await setCampaignActive(camp.id, !camp.active);
+        } catch (err: any) {
+            console.error("Erro ao alterar status da campanha:", err);
+            setErrorMsg(err.message || "Erro ao alterar status.");
+        }
+    };
+
+    // Dynamical Aggregators for Reports
+    const getCampaignStats = useMemo(() => {
+        return (camp: Campaign) => {
+            const start = camp.startDate.getTime();
+            const end = camp.endDate.getTime();
+
+            const historyInCampaign: any[] = [];
+            const uniqueTerritoriesWorked = new Set<string>();
+            const uniquePublishers = new Set<string>();
+
+            territories.forEach(t => {
+                if (t.history && Array.isArray(t.history)) {
+                    t.history.forEach(h => {
+                        const completedTime = h.completedDate ? new Date(h.completedDate).getTime() : 0;
+                        if (completedTime >= start && completedTime <= end) {
+                            historyInCampaign.push({
+                                ...h,
+                                territoryId: t.id,
+                                territoryNumber: t.number,
+                                territoryName: t.name,
+                                locality: t.locality
+                            });
+                            uniqueTerritoriesWorked.add(t.id);
+                            if (h.userId) uniquePublishers.add(h.userId);
+                        }
+                    });
+                }
+            });
+
+            const assignmentsInCampaign = territories.filter(t => {
+                if (t.assignmentDate) {
+                    const assignTime = new Date(t.assignmentDate).getTime();
+                    return assignTime >= start && assignTime <= end;
+                }
+                return false;
+            });
+
+            const totalTerritoriesCount = territories.length || 1;
+            const workedCount = uniqueTerritoriesWorked.size;
+            const coveragePercentage = Math.round((workedCount / totalTerritoriesCount) * 100);
+
+            return {
+                history: historyInCampaign,
+                workedCount,
+                coveragePercentage,
+                publishersCount: uniquePublishers.size,
+                assignmentsCount: assignmentsInCampaign.length,
+                assignments: assignmentsInCampaign,
+            };
+        };
+    }, [territories]);
+
     const handleFulfillRequest = async (requestId: string) => {
         if (selectedMapsForRequest.length === 0) return;
         try {
@@ -468,6 +718,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                     {activeTab === 'history' && 'Histórico'}
                                     {activeTab === 'users' && 'Gestão de Usuários'}
                                     {activeTab === 'stats' && 'Relatórios Estatísticos'}
+                                    {activeTab === 'campaigns' && 'Campanhas Especiais'}
                                 </h1>
                                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mt-1.5">
                                     {activeTab === 'dashboard' && 'Ambiente Administrativo • Central do Painel'}
@@ -477,6 +728,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                     {activeTab === 'history' && 'Ambiente Administrativo • Registro geral de eventos'}
                                     {activeTab === 'users' && 'Ambiente Administrativo • Cadastro de publicadores e roles'}
                                     {activeTab === 'stats' && 'Ambiente Administrativo • Métricas de cobertura de território'}
+                                    {activeTab === 'campaigns' && 'Ambiente Administrativo • Controle de campanhas anuais, estatísticas e comparações'}
                                 </p>
                             </div>
                         </div>
@@ -615,10 +867,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                         )}
 
                         {errorMsg && (
-                            <div className="fixed bottom-4 right-4 z-[110] bg-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-4">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                                <p className="text-xs font-black uppercase tracking-widest">{errorMsg}</p>
-                                <button onClick={() => setErrorMsg(null)} className="ml-4 p-1 hover:bg-white/20 rounded-lg">&times;</button>
+                            <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-[110] max-w-sm md:max-w-md bg-rose-950 text-white border border-rose-800/50 p-5 rounded-2xl shadow-2xl flex items-start gap-4 animate-in slide-in-from-bottom-4 transition-all duration-300">
+                                <div className="p-2 bg-rose-900/50 text-rose-200 rounded-xl shrink-0 mt-0.5">
+                                    <svg className="w-5 h-5 animate-bounce-slow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                </div>
+                                <div className="flex-grow min-w-0">
+                                    {renderErrorDetail(errorMsg)}
+                                </div>
+                                <button 
+                                    onClick={() => setErrorMsg(null)} 
+                                    className="p-1.5 hover:bg-rose-900/60 text-rose-300 hover:text-white rounded-lg transition-colors shrink-0"
+                                    aria-label="Minimizar erro"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
                             </div>
                         )}
 
@@ -1108,9 +1374,473 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                 </div>
                             </div>
                         )}
+
+                        {activeTab === 'campaigns' && (
+                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                                {/* Campaigns Navigation & Actions */}
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-gray-150 shadow-sm font-bold">
+                                    <div>
+                                        <h2 className="text-lg font-bold text-gray-800">Campanhas da Congregação</h2>
+                                        <p className="text-xs text-gray-400 mt-1">Gerencie campanhas de distribuição de mapas e gere relatórios inteligentes para análise dos anciãos.</p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setEditingCampaign(null);
+                                            setCampaignName('');
+                                            setCampaignNumber('');
+                                            setCampaignStartDate(toLocalInputDate(new Date()));
+                                            setCampaignEndDate(() => {
+                                                const d = new Date();
+                                                d.setDate(d.getDate() + 30);
+                                                return toLocalInputDate(d);
+                                            });
+                                            setCampaignActiveState(false);
+                                            setShowAddCampaignModal(true);
+                                        }}
+                                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" /></svg>
+                                        Nova Campanha
+                                    </button>
+                                </div>
+
+                                {/* Main Campaigns Workspace - Two Panels (Active and Stats/Comparisons) */}
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                    {/* Left 1/3: Campaign List and Simple Configs */}
+                                    <div className="space-y-6 lg:col-span-1 border-r border-gray-150 lg:pr-4">
+                                        <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm space-y-4">
+                                            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                                                <h3 className="text-sm font-bold text-gray-800">Lista de Campanhas</h3>
+                                                <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold">{campaigns.length}</span>
+                                            </div>
+
+                                            {loadingCampaigns ? (
+                                                <div className="flex items-center justify-center py-8">
+                                                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+                                                </div>
+                                            ) : campaigns.length === 0 ? (
+                                                <div className="text-center py-12 text-gray-400 font-bold">
+                                                    <svg className="w-10 h-10 mx-auto opacity-30 text-gray-505 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                                                    <p className="text-xs text-gray-400">Nenhuma campanha cadastrada</p>
+                                                    <p className="text-[10px] mt-1 text-slate-400">Crie sua primeira campanha para começar.</p>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                                                    {campaigns.map((camp) => {
+                                                        const campStats = getCampaignStats(camp);
+                                                        return (
+                                                            <div 
+                                                                key={camp.id} 
+                                                                className={`p-4 rounded-xl border transition relative group cursor-pointer ${
+                                                                    selectedCampaignForReport?.id === camp.id 
+                                                                        ? 'border-blue-500 bg-blue-50/50' 
+                                                                        : 'border-gray-150 hover:border-gray-300 bg-slate-50/30'
+                                                                }`}
+                                                                onClick={() => setSelectedCampaignForReport(camp)}
+                                                            >
+                                                                <div className="flex items-start justify-between">
+                                                                    <div className="space-y-1">
+                                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                                            <h4 className="text-xs font-bold text-gray-800">{camp.name}</h4>
+                                                                            {camp.number && (
+                                                                                <span className="text-[9px] bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded font-black">Nº {camp.number}</span>
+                                                                            )}
+                                                                            {camp.active ? (
+                                                                                <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-bold animate-pulse">Ativo</span>
+                                                                            ) : (
+                                                                                <span className="text-[9px] bg-gray-300 text-white px-1.5 py-0.5 rounded font-bold">Inativo</span>
+                                                                            )}
+                                                                        </div>
+                                                                        <p className="text-[10px] text-gray-500 font-medium">
+                                                                            {formatDate(camp.startDate)} - {formatDate(camp.endDate)}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Interactive Progress Meter */}
+                                                                <div className="mt-3 space-y-1.5">
+                                                                    <div className="flex justify-between items-center text-[9px] text-gray-500">
+                                                                        <span>Cobertura de Mapas</span>
+                                                                        <span className="font-bold">{campStats.workedCount} concluídos ({campStats.coveragePercentage}%)</span>
+                                                                    </div>
+                                                                    <div className="w-full h-1.5 bg-gray-200/50 rounded-full overflow-hidden">
+                                                                        <div 
+                                                                            className={`h-full rounded-full transition-all duration-500 ${
+                                                                                camp.active ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : 'bg-gray-400'
+                                                                            }`}
+                                                                            style={{ width: `${Math.min(campStats.coveragePercentage, 100)}%` }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Hover Action Buttons */}
+                                                                <div className="mt-3 flex items-center gap-2 justify-end opacity-60 group-hover:opacity-100 transition font-bold">
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleToggleCampaignActiveStatus(camp);
+                                                                        }}
+                                                                        title={camp.active ? "Marcar como Inativo" : "Marcar como Ativo"}
+                                                                        className={`p-1 rounded text-[10px] font-bold ${
+                                                                            camp.active ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50'
+                                                                        }`}
+                                                                    >
+                                                                        {camp.active ? "Desativar" : "Ativar"}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleEditCampaignClick(camp);
+                                                                        }}
+                                                                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                                                        title="Editar"
+                                                                    >
+                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleDeleteCampaignClick(camp.id);
+                                                                        }}
+                                                                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                                                        title="Excluir"
+                                                                    >
+                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                                    </button>
+                                                                    <div className="flex items-center gap-1 ml-auto font-bold">
+                                                                        <input 
+                                                                            type="checkbox"
+                                                                            id={`compare-${camp.id}`}
+                                                                            checked={comparingCampaignIds.includes(camp.id)}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                            }}
+                                                                            onChange={(e) => {
+                                                                                if (e.target.checked) {
+                                                                                    setComparingCampaignIds(prev => [...prev, camp.id]);
+                                                                                } else {
+                                                                                    setComparingCampaignIds(prev => prev.filter(id => id !== camp.id));
+                                                                                }
+                                                                            }}
+                                                                            className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer h-3 w-3"
+                                                                        />
+                                                                        <label htmlFor={`compare-${camp.id}`} className="text-[9px] text-gray-500 select-none cursor-pointer">Comparar</label>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Right 2/3: Reports, Graphics & Comparisons */}
+                                    <div className="lg:col-span-2 space-y-6">
+                                        {comparingCampaignIds.length > 1 ? (
+                                            <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm space-y-6 animate-in fade-in zoom-in-95 font-bold">
+                                                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                                                    <div>
+                                                        <h3 className="text-sm font-bold text-gray-800">Comparação Ampla entre Campanhas</h3>
+                                                        <p className="text-[10px] text-gray-400 mt-0.5">Análise de métricas consolidadas das campanhas selecionadas lado a lado.</p>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => setComparingCampaignIds([])}
+                                                        className="text-[10px] uppercase font-bold text-blue-600 hover:text-blue-800"
+                                                    >
+                                                        Limpar Comparação
+                                                    </button>
+                                                </div>
+
+                                                {/* Dashboard grid comparing statistics */}
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-left text-xs text-gray-650 border-collapse">
+                                                        <thead>
+                                                            <tr className="border-b border-gray-150 uppercase tracking-wider text-[10px] text-gray-400">
+                                                                <th className="py-2.5 font-bold">Campanha / Período</th>
+                                                                <th className="py-2.5 font-bold text-center">Mapas Concluídos</th>
+                                                                <th className="py-2.5 font-bold text-center">Cobertura</th>
+                                                                <th className="py-2.5 font-bold text-center">Designações Efetuadas</th>
+                                                                <th className="py-2.5 font-bold text-center">Publicadores Ativos</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {campaigns.filter(c => comparingCampaignIds.includes(c.id)).map(camp => {
+                                                                const campStats = getCampaignStats(camp);
+                                                                return (
+                                                                    <tr key={camp.id} className="border-b border-gray-100 hover:bg-slate-50/55 transition">
+                                                                        <td className="py-3 font-semibold text-gray-800">
+                                                                            <span className="block">{camp.name}</span>
+                                                                            <span className="text-[10px] text-gray-450 font-normal">{formatDate(camp.startDate)} - {formatDate(camp.endDate)}</span>
+                                                                        </td>
+                                                                        <td className="py-3 text-center font-black text-gray-700">{campStats.workedCount}</td>
+                                                                        <td className="py-3 text-center">
+                                                                            <span className="inline-flex items-center gap-1.5 font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full text-[10px]">
+                                                                                {campStats.coveragePercentage}%
+                                                                            </span>
+                                                                            <div className="w-16 h-1 bg-gray-100 rounded-full mx-auto mt-1 overflow-hidden">
+                                                                                <div className="h-full bg-blue-500" style={{ width: `${campStats.coveragePercentage}%` }} />
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="py-3 text-center font-bold text-gray-600">{campStats.assignmentsCount}</td>
+                                                                        <td className="py-3 text-center font-bold text-gray-600">{campStats.publishersCount}</td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                {/* Graphical Bar Comparison Chart */}
+                                                <div className="bg-slate-50/30 p-5 rounded-2xl border border-gray-150">
+                                                    <h4 className="text-xs font-bold text-gray-800 mb-4">Gráfico Comparativo de Cobertura (%)</h4>
+                                                    <div className="space-y-4">
+                                                        {campaigns.filter(c => comparingCampaignIds.includes(c.id)).map((camp, index) => {
+                                                            const campStats = getCampaignStats(camp);
+                                                            const colorClass = index % 3 === 0 ? 'bg-blue-600' : index % 3 === 1 ? 'bg-emerald-500' : 'bg-amber-500';
+                                                            return (
+                                                                <div key={camp.id} className="space-y-1">
+                                                                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-600">
+                                                                        <span>{camp.name}</span>
+                                                                        <span>{campStats.coveragePercentage}%</span>
+                                                                    </div>
+                                                                    <div className="w-full h-3 bg-gray-200/50 rounded-full overflow-hidden">
+                                                                       <div 
+                                                                           className={`h-full rounded-full transition-all duration-700 ${colorClass}`}
+                                                                           style={{ width: `${campStats.coveragePercentage}%` }}
+                                                                       />
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : selectedCampaignForReport ? (
+                                            /* Single Campaign In-depth intelligent Analysis */
+                                            <div className="bg-white p-6 rounded-2xl border border-gray-155 shadow-sm space-y-6 animate-in fade-in">
+                                                {/* Report Header */}
+                                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 border-b border-gray-100">
+                                                    <div>
+                                                        <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider">
+                                                            Relatório Consolidado de Campanha
+                                                        </h3>
+                                                        <p className="text-xl font-extrabold text-blue-700 mt-1">
+                                                            {selectedCampaignForReport.name} {selectedCampaignForReport.number ? `• Nº ${selectedCampaignForReport.number}` : ''}
+                                                        </p>
+                                                        <p className="text-[10px] text-gray-400 font-medium mt-1">
+                                                            Período analítico: {formatDate(selectedCampaignForReport.startDate)} até {formatDate(selectedCampaignForReport.endDate)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                                                            selectedCampaignForReport.active 
+                                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                                                : 'bg-gray-100 text-gray-600'
+                                                        }`}>
+                                                            {selectedCampaignForReport.active ? '● Ativa e Registrando' : 'Finalizada'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Stats Widgets */}
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-gray-150">
+                                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Mapas Concluídos</p>
+                                                        <p className="text-2xl font-black text-gray-800 mt-1">
+                                                            {getCampaignStats(selectedCampaignForReport).workedCount}
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-gray-150">
+                                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Cobertura Geral</p>
+                                                        <p className="text-2xl font-black text-blue-700 mt-1">
+                                                            {getCampaignStats(selectedCampaignForReport).coveragePercentage}%
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-gray-150">
+                                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Vinculados Período</p>
+                                                        <p className="text-2xl font-black text-gray-800 mt-1">
+                                                            {getCampaignStats(selectedCampaignForReport).assignmentsCount}
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-gray-150">
+                                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Publicadores Ativos</p>
+                                                        <p className="text-2xl font-black text-gray-800 mt-1">
+                                                            {getCampaignStats(selectedCampaignForReport).publishersCount}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Worked Map Logs */}
+                                                <div className="space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider">Registros detalhados de mapas trabalhados</h4>
+                                                        <span className="text-[10px] text-gray-500 font-bold">{getCampaignStats(selectedCampaignForReport).history.length} conclusões</span>
+                                                    </div>
+
+                                                    {getCampaignStats(selectedCampaignForReport).history.length === 0 ? (
+                                                        <div className="text-center py-10 bg-slate-50/40 rounded-2xl border border-dashed border-gray-150 text-gray-400 text-xs">
+                                                            Nenhum mapa foi concluído durante o intervalo definido para esta campanha.
+                                                        </div>
+                                                    ) : (
+                                                        <div className="overflow-x-auto border border-gray-150 rounded-2xl font-bold">
+                                                            <table className="w-full text-left text-xs text-gray-600 border-collapse animate-in fade-in">
+                                                                <thead className="bg-slate-50/50">
+                                                                    <tr className="border-b border-gray-100 text-[9px] font-black uppercase text-gray-400 tracking-wider">
+                                                                        <th className="py-2.5 px-4 font-bold">Número / Nome</th>
+                                                                        <th className="py-2.5 px-4 font-bold">Setor / Setor Urbano</th>
+                                                                        <th className="py-2.5 px-4 font-bold">Trabalhado Por</th>
+                                                                        <th className="py-2.5 px-4 font-bold">Conclusão</th>
+                                                                        <th className="py-2.5 px-4 font-bold">Observações</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {getCampaignStats(selectedCampaignForReport).history.map((log, index) => (
+                                                                        <tr key={index} className="border-b border-gray-100 hover:bg-slate-50/30 transition">
+                                                                            <td className="py-3 px-4">
+                                                                                <span className="inline-block bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded text-[10px] mr-1.5 font-black">MAPA {log.territoryNumber}</span>
+                                                                                <span className="font-bold text-gray-800">{log.territoryName}</span>
+                                                                            </td>
+                                                                            <td className="py-3 px-4 font-semibold text-gray-500">{log.locality}</td>
+                                                                            <td className="py-3 px-4 font-bold text-slate-700">{log.userName}</td>
+                                                                            <td className="py-3 px-4 text-gray-500">{formatDate(log.completedDate)}</td>
+                                                                            <td className="py-3 px-4 text-gray-400 truncate max-w-[150px]" title={log.notes}>{log.notes || 'Sem observações'}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Analytical Insights from Campaign */}
+                                                <div className="bg-blue-50/55 p-5 rounded-2xl border border-blue-100/50 space-y-3 font-bold">
+                                                    <h4 className="text-xs font-bold text-blue-950 flex items-center gap-1.5 font-bold">
+                                                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                        Análise Inteligente e Projeção Congregacional
+                                                    </h4>
+                                                    <p className="text-xs text-blue-950 leading-relaxed font-semibold">
+                                                        {getCampaignStats(selectedCampaignForReport).workedCount === 0 ? (
+                                                            "A campanha acaba de iniciar ou não registrou nenhuma conclusão ainda no período delimitado. Assim que os publicadores concluírem seus territórios vinculados ou entregarem seus relatórios, as estatísticas de cobertura geral atualizarão em tempo real neste painel informativo."
+                                                        ) : (
+                                                            `Com ${getCampaignStats(selectedCampaignForReport).workedCount} mapa(s) concluído(s) no período de ${selectedCampaignForReport.name}, obtivemos uma cobertura real de ${getCampaignStats(selectedCampaignForReport).coveragePercentage}% de nossas localidades congregacionais. Identificamos que as ações de pregação envolveram ativamente ${getCampaignStats(selectedCampaignForReport).publishersCount} irmão(s) liderando as saídas de campo.`
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-white p-12 rounded-2xl border border-gray-150 shadow-sm text-center text-gray-400 font-bold">
+                                                <svg className="w-12 h-12 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                                                <h3 className="text-sm font-bold text-gray-700">Explore Campanhas & Analise Dados</h3>
+                                                <p className="text-xs mt-1.5 max-w-md mx-auto">Selecione uma campanha à esquerda para visualizar seu relatório consolidado detalhado ou marque duas ou mais opções para compará-las mutuamente.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                </div>
+
+            {showAddCampaignModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-155">
+                        <div className="bg-slate-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between font-bold">
+                            <h3 className="font-bold text-gray-850 text-sm uppercase tracking-wider">
+                                {editingCampaign ? 'Editar Campanha' : 'Nova Campanha'}
+                            </h3>
+                            <button 
+                                onClick={() => setShowAddCampaignModal(false)}
+                                className="text-gray-400 hover:text-gray-700 p-1.5 hover:bg-gray-100 rounded-lg transition"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSaveCampaign} className="p-6 space-y-4">
+                            <div className="space-y-1 font-bold">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block font-bold">Nome da Campanha *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={campaignName}
+                                    onChange={(e) => setCampaignName(e.target.value)}
+                                    placeholder="Ex: Campanha Especial de Convites"
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                />
+                            </div>
+
+                            <div className="space-y-1 font-bold">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block font-bold">Número identificador (Opcional)</label>
+                                <input
+                                    type="text"
+                                    value={campaignNumber}
+                                    onChange={(e) => setCampaignNumber(e.target.value)}
+                                    placeholder="Ex: 2026, Campanha 1"
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 font-bold">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Data de Início *</label>
+                                    <input
+                                        type="date"
+                                        required
+                                        value={campaignStartDate}
+                                        onChange={(e) => setCampaignStartDate(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Data de Término *</label>
+                                    <input
+                                        type="date"
+                                        required
+                                        value={campaignEndDate}
+                                        onChange={(e) => setCampaignEndDate(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 py-2 font-bold">
+                                <input
+                                    type="checkbox"
+                                    id="campaign-active-chk"
+                                    checked={campaignActive}
+                                    onChange={(e) => setCampaignActiveState(e.target.checked)}
+                                    className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                                />
+                                <label htmlFor="campaign-active-chk" className="text-xs text-gray-700 select-none cursor-pointer font-bold">
+                                    Marcar como Campanha Ativa Atual
+                                </label>
+                            </div>
+                            <p className="text-[10px] text-gray-400 font-bold">
+                                Obs: Ativar esta campanha desativará automaticamente qualquer outra campanha ativa anterior.
+                            </p>
+
+                            <div className="pt-4 border-t border-gray-150 flex items-center justify-end gap-3 font-bold">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddCampaignModal(false)}
+                                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-xl transition"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-xl transition font-bold"
+                                >
+                                    {editingCampaign ? 'Salvar Edições' : 'Criar Campanha'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
+            )}
             </div>
+        </div>
     );
 };
 
