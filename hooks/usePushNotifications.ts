@@ -16,10 +16,13 @@ export const usePushNotifications = (user: User | null) => {
                 // Request permission
                 const permission = await Notification.requestPermission();
                 if (permission === 'granted') {
+                    // Encontra o Service Worker ativo para evitar dupla assinatura ou erro de arquivo 404
+                    const registration = await navigator.serviceWorker.ready;
+                    
                     // Get token
-                    // Note: You need to provide your VAPID key here
                     const token = await getToken(messagingInstance, {
-                        vapidKey: (import.meta as any).env.VITE_VAPID_KEY
+                        vapidKey: (import.meta as any).env.VITE_VAPID_KEY,
+                        serviceWorkerRegistration: registration
                     });
 
                     if (token) {
@@ -30,9 +33,20 @@ export const usePushNotifications = (user: User | null) => {
 
                 // Handle foreground messages
                 if (messagingInstance) {
-                    onMessage(messagingInstance, (payload) => {
+                    onMessage(messagingInstance, async (payload) => {
                         console.log('Message received in foreground: ', payload);
-                        // You can show a custom toast here if you want
+                        
+                        // Exibe a notificação no topo do celular (como Push do Sistema) mesmo com app aberto!
+                        if (payload.notification && Notification.permission === 'granted') {
+                            const registration = await navigator.serviceWorker.ready;
+                            await registration.showNotification(payload.notification.title || 'Nova Notificação', {
+                                body: payload.notification.body || '',
+                                icon: 'map-icon.svg',
+                                badge: 'map-icon.svg',
+                                requireInteraction: true,
+                                data: payload.data
+                            });
+                        }
                     });
                 }
 

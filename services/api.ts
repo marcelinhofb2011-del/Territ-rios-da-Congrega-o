@@ -749,6 +749,12 @@ export const requestTerritory = async (user: User): Promise<void> => {
                 read: false,
                 createdAt: Timestamp.now()
             });
+            // Envia push notification em tempo real para o administrador
+            sendPushNotification(
+                adminId,
+                "Nova Solicitação 🗺️",
+                `${user.name} solicitou um novo território.`
+            );
         } catch (error) {
             handleFirestoreError(error, OperationType.CREATE, 'notifications');
         }
