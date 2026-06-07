@@ -28,6 +28,8 @@ export interface TerritoryHistory {
   assignmentDate: Date;
   completedDate: Date;
   notes?: string;
+  isReversal?: boolean;
+  isReset?: boolean;
 }
 
 export interface Territory {

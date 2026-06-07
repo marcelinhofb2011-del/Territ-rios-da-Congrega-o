@@ -464,6 +464,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                     t.history.forEach(h => {
                         const completedTime = h.completedDate ? new Date(h.completedDate).getTime() : 0;
                         if (completedTime >= start && completedTime <= end) {
+                            // Ignora estornos e retomadas do administrador
+                            const isReversal = h.isReversal === true || (h.notes && (
+                                h.notes.toLowerCase().includes('extorno') || 
+                                h.notes.toLowerCase().includes('estorno')
+                            ));
+                            const isReset = h.isReset === true || (h.notes && (
+                                h.notes.toLowerCase().includes('retomado pelo administrador') || 
+                                h.notes.toLowerCase().includes('retomado por')
+                            ));
+
+                            if (isReversal || isReset) return;
+
                             historyInCampaign.push({
                                 ...h,
                                 territoryId: t.id,

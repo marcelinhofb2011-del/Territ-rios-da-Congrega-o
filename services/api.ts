@@ -568,7 +568,8 @@ export const adminResetTerritory = async (territoryId: string, adminUser: User):
                     userName: territoryData.assignedToName,
                     assignmentDate: territoryData.assignmentDate, // Já está como Timestamp do Firestore
                     completedDate: Timestamp.now(),
-                    notes: `Território retomado pelo administrador (${adminUser.name}).`
+                    notes: `Território retomado pelo administrador (${adminUser.name}).`,
+                    isReset: true
                 };
                 newHistory.push(historyEntry);
             }
@@ -1035,7 +1036,8 @@ export const reversalTerritory = async (user: User, territoryId: string): Promis
                 userName: user.name,
                 assignmentDate: territoryData.assignmentDate || Timestamp.now(),
                 completedDate: Timestamp.now(),
-                notes: "Extorno: Mapa devolvido sem ser trabalhado."
+                notes: "Extorno: Mapa devolvido sem ser trabalhado.",
+                isReversal: true
             };
             
             const currentHistory = territoryData.history || [];
