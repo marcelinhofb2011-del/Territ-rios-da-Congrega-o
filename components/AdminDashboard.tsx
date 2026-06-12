@@ -16,6 +16,7 @@ import EditMapModal from './modals/EditMapModal';
 import ConfirmModal from './modals/ConfirmModal';
 import ManualAssignmentModal from './modals/ManualAssignmentModal';
 import EditAssignmentDatesModal from './modals/EditAssignmentDatesModal';
+import { SuperintendentReportModal } from './modals/SuperintendentReportModal';
 import { useAuth } from '../hooks/useAuth';
 import { 
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, 
@@ -113,6 +114,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
     const [showManualAssignModal, setShowManualAssignModal] = useState(false);
     const [manualAssignUserId, setManualAssignUserId] = useState<string | undefined>(undefined);
     const [editingAssignment, setEditingAssignment] = useState<Territory | null>(null);
+    const [showSuperintendentModal, setShowSuperintendentModal] = useState(false);
     const [confirmAction, setConfirmAction] = useState<{
         title: string;
         message: string;
@@ -227,7 +229,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
 
     // Prevent body scroll when sidebar or modals are active
     useEffect(() => {
-        const shouldLock = isSidebarOpen || showAddModal || !!editingTerritory || showManualAssignModal || !!editingAssignment || !!viewHistory || !!viewingMap || !!fulfillingRequestId || showAddCampaignModal;
+        const shouldLock = isSidebarOpen || showAddModal || !!editingTerritory || showManualAssignModal || !!editingAssignment || !!viewHistory || !!viewingMap || !!fulfillingRequestId || showAddCampaignModal || showSuperintendentModal;
         if (shouldLock) {
             document.body.style.overflow = 'hidden';
         } else {
@@ -236,7 +238,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
         return () => {
             document.body.style.overflow = '';
         };
-    }, [isSidebarOpen, showAddModal, editingTerritory, showManualAssignModal, editingAssignment, viewHistory, viewingMap, fulfillingRequestId, showAddCampaignModal]);
+    }, [isSidebarOpen, showAddModal, editingTerritory, showManualAssignModal, editingAssignment, viewHistory, viewingMap, fulfillingRequestId, showAddCampaignModal, showSuperintendentModal]);
 
     useEffect(() => {
         if (!user) return;
@@ -777,6 +779,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                         {editingAssignment && <EditAssignmentDatesModal territory={editingAssignment} onClose={() => setEditingAssignment(null)} onSuccess={() => {}} />}
                         {viewHistory && <TerritoryHistoryModal territory={viewHistory} onClose={() => setViewHistory(null)} />}
                         {viewingMap && <MapViewerModal url={viewingMap.pdfUrl} name={viewingMap.name} number={viewingMap.number} onClose={() => setViewingMap(null)} />}
+                        {showSuperintendentModal && (
+                            <SuperintendentReportModal 
+                                territories={territories} 
+                                onClose={() => setShowSuperintendentModal(false)}
+                                congregationName="Congregação Principal"
+                            />
+                        )}
                         
                         {fulfillingRequestId && (
                             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -1186,11 +1195,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <button className="px-4 py-2.5 text-slate-600 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100 transition-all flex items-center gap-2">
+                                        <button 
+                                            onClick={() => setShowSuperintendentModal(true)}
+                                            className="px-4 py-2.5 text-slate-600 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100 transition-all flex items-center gap-2"
+                                        >
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                                             PDF
                                         </button>
-                                        <button className="px-4 py-2.5 text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100 transition-all flex items-center gap-2">
+                                        <button 
+                                            onClick={() => setShowSuperintendentModal(true)}
+                                            className="px-4 py-2.5 text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100 transition-all flex items-center gap-2"
+                                        >
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2m-6-9a3 3 0 116 0M3 19v-6a2 2 0 012-2h14a2 2 0 012 2v6" /></svg>
                                             Relatório
                                         </button>
@@ -1235,7 +1250,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                                         </td>
                                                         <td className="px-4 py-4 text-center">
                                                             <span className="text-[10px] font-black text-slate-500 tabular-nums uppercase bg-slate-100/50 px-2 py-1 rounded-md">
-                                                                {h.assignedDate ? formatDate(h.assignedDate) : '-'}
+                                                                {h.assignmentDate ? formatDate(h.assignmentDate) : '-'}
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-4 text-center">
