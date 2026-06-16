@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Territory, TerritoryStatus } from '../../types';
 import { formatDate } from '../../utils/helpers';
+import { S13TFormReport } from './S13TFormReport';
 import { 
   FileText, 
   Printer, 
@@ -84,20 +85,162 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
     ];
   }, []);
 
-  const [selectedShortcut, setSelectedShortcut] = useState<string>('current_sy');
-  const [startDateStr, setStartDateStr] = useState<string>(() => {
-    const sy = dateShortcuts.find(s => s.id === 'current_sy');
-    return sy ? sy.start.toISOString().split('T')[0] : '';
-  });
-  const [endDateStr, setEndDateStr] = useState<string>(() => {
-    const sy = dateShortcuts.find(s => s.id === 'current_sy');
-    return sy ? sy.end.toISOString().split('T')[0] : '';
+  const [activeReportTab, setActiveReportTab] = useState<'s13' | 'analytical'>(() => {
+    try {
+      const saved = localStorage.getItem('sup_report_active_tab');
+      return saved === 'analytical' ? 'analytical' : 's13';
+    } catch {
+      return 's13';
+    }
   });
 
-  const [localityFilter, setLocalityFilter] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [hideReversals, setHideReversals] = useState<boolean>(true);
+  const [congregation, setCongregation] = useState<string>(() => {
+    try {
+      return localStorage.getItem('sup_report_congregation') || congregationName || 'Congregação Local';
+    } catch {
+      return congregationName || 'Congregação Local';
+    }
+  });
+
+  const [serviceYear, setServiceYear] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('sup_report_service_year');
+      if (saved) return saved;
+    } catch {}
+    const today = new Date();
+    let currentServiceYear = today.getFullYear();
+    if (today.getMonth() >= 8) { // Sept or later
+      currentServiceYear += 1;
+    }
+    return String(currentServiceYear);
+  });
+
+  const [selectedShortcut, setSelectedShortcut] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('sup_report_shortcut');
+      return saved ? saved : 'current_sy';
+    } catch {
+      return 'current_sy';
+    }
+  });
+
+  const [startDateStr, setStartDateStr] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('sup_report_startDate');
+      if (saved) return saved;
+    } catch {}
+    const defaultShortcut = dateShortcuts.find(s => s.id === 'current_sy');
+    return defaultShortcut ? defaultShortcut.start.toISOString().split('T')[0] : '';
+  });
+
+  const [endDateStr, setEndDateStr] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('sup_report_endDate');
+      if (saved) return saved;
+    } catch {}
+    const defaultShortcut = dateShortcuts.find(s => s.id === 'current_sy');
+    return defaultShortcut ? defaultShortcut.end.toISOString().split('T')[0] : '';
+  });
+
+  const [localityFilter, setLocalityFilter] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('sup_report_localityFilter');
+      return saved || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+
+  const [searchQuery, setSearchQuery] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('sup_report_searchQuery');
+      return saved || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('sup_report_statusFilter');
+      return saved || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+
+  const [hideReversals, setHideReversals] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('sup_report_hideReversals');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  // Save selected filters to localStorage whenever they change
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('sup_report_active_tab', activeReportTab);
+      localStorage.setItem('sup_report_congregation', congregation);
+      localStorage.setItem('sup_report_service_year', serviceYear);
+      localStorage.setItem('sup_report_shortcut', selectedShortcut);
+      localStorage.setItem('sup_report_startDate', startDateStr);
+      localStorage.setItem('sup_report_endDate', endDateStr);
+      localStorage.setItem('sup_report_localityFilter', localityFilter);
+      localStorage.setItem('sup_report_statusFilter', statusFilter);
+      localStorage.setItem('sup_report_searchQuery', searchQuery);
+      localStorage.setItem('sup_report_hideReversals', String(hideReversals));
+    } catch (e) {
+      console.warn("Could not save report filters to local storage", e);
+    }
+  }, [activeReportTab, congregation, serviceYear, selectedShortcut, startDateStr, endDateStr, localityFilter, statusFilter, searchQuery, hideReversals]);
+
+  // Adjust date based on Service Year changes
+  const handleServiceYearChange = (year: string) => {
+    setServiceYear(year);
+    if (year === 'all') {
+      setSelectedShortcut('all');
+      const shortcut = dateShortcuts.find(s => s.id === 'all');
+      if (shortcut) {
+        setStartDateStr(shortcut.start.toISOString().split('T')[0]);
+        setEndDateStr(shortcut.end.toISOString().split('T')[0]);
+      }
+      return;
+    }
+    const yr = parseInt(year, 10);
+    if (!isNaN(yr)) {
+      setSelectedShortcut('custom');
+      setStartDateStr(`${yr - 1}-09-01`);
+      setEndDateStr(`${yr}-08-31`);
+    }
+  };
+
+  // Fast monthly step adjust helper
+  const adjustDate = (type: 'start' | 'end', months: number) => {
+    setSelectedShortcut('custom');
+    const currentDateStr = type === 'start' ? startDateStr : endDateStr;
+    if (!currentDateStr) return;
+    const parts = currentDateStr.split('-');
+    if (parts.length !== 3) return;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; // 0-based index
+    const day = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+    d.setMonth(d.getMonth() + months);
+    
+    // Format to yyyy-mm-dd safely without timezone shift
+    const yStr = d.getFullYear();
+    const mStr = String(d.getMonth() + 1).padStart(2, '0');
+    const dStr = String(d.getDate()).padStart(2, '0');
+    const updatedStr = `${yStr}-${mStr}-${dStr}`;
+    
+    if (type === 'start') {
+      setStartDateStr(updatedStr);
+    } else {
+      setEndDateStr(updatedStr);
+    }
+  };
 
   // Get list of unique localities for dropdown
   const uniqueLocalities = useMemo(() => {
@@ -292,6 +435,189 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
     };
   }, [filteredItems, territories]);
 
+  // S-13-T custom compact date formatter
+  const formatDateS13 = (date: Date | string | null | undefined): string => {
+    if (!date) return '';
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return '';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = String(d.getFullYear()).slice(-2); // Use 2-digit year to fit perfectly in narrow column
+    return `${day}/${month}/${year}`;
+  };
+
+  // Compile S-13-T official grid dataset in paginated sheets (24 territories per sheet, and multiple sheets if designações > 4)
+  const s13Sheets = useMemo(() => {
+    // Sort all territories naturally by alphanumeric number (e.g. Map 1, Map 2)
+    const sortedTerritories = [...territories].sort((a, b) => {
+      const numA = parseInt(a.number.replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(b.number.replace(/\D/g, ''), 10) || 0;
+      if (numA !== numB) return numA - numB;
+      return a.number.localeCompare(b.number);
+    });
+
+    if (sortedTerritories.length === 0) {
+      // Return 1 blank sheet
+      const blankRowList = Array.from({ length: 24 }, (_, idx) => ({
+        id: `blank-row-empty-${idx}`,
+        number: '',
+        name: '',
+        lastCompletedDate: null,
+        assignments: []
+      }));
+      return [{
+        id: 'empty-sheet-0',
+        title: 'Modelo em Branco S-13-T',
+        sheetNumber: 1,
+        totalPages: 1,
+        rows: blankRowList
+      }];
+    }
+
+    // Parse all assignments for each territory up to the filtered end date
+    const parsedTerritoryDataList = sortedTerritories.map(t => {
+      const assignments: { assigned: Date; completed: Date | null; publisherName: string }[] = [];
+
+      // Past logs
+      if (t.history && Array.isArray(t.history)) {
+        t.history.forEach(h => {
+          if (h.assignmentDate) {
+            assignments.push({
+              assigned: h.assignmentDate instanceof Date ? h.assignmentDate : new Date(h.assignmentDate),
+              completed: h.completedDate ? (h.completedDate instanceof Date ? h.completedDate : new Date(h.completedDate)) : null,
+              publisherName: h.userName || 'Irmão'
+            });
+          }
+        });
+      }
+
+      // Active assignment
+      if (t.status === TerritoryStatus.IN_USE && t.assignmentDate) {
+        assignments.push({
+          assigned: t.assignmentDate instanceof Date ? t.assignmentDate : new Date(t.assignmentDate),
+          completed: null,
+          publisherName: t.assignedToName || 'Irmão'
+        });
+      }
+
+      // Sort chronological
+      assignments.sort((a, b) => a.assigned.getTime() - b.assigned.getTime());
+
+      // Filter: ONLY exclude assignments after the filtered end date.
+      // This preserves sequential columns ("mostrar o registro preenchido independente da data").
+      let filteredAssignments = assignments;
+      if (serviceYear !== 'all' && endDateStr) {
+        const endFilter = new Date(endDateStr + 'T23:59:59');
+        filteredAssignments = assignments.filter(asg => asg.assigned <= endFilter);
+      }
+
+      return {
+        id: t.id,
+        number: t.number,
+        name: t.name,
+        baseLastCompletedDate: t.lastCompletedDate ? (t.lastCompletedDate instanceof Date ? t.lastCompletedDate : new Date(t.lastCompletedDate)) : null,
+        assignments: filteredAssignments
+      };
+    });
+
+    // Group physical territories into batches of exactly 24
+    const physicalBatches: typeof parsedTerritoryDataList[] = [];
+    const batchSize = 24;
+    for (let i = 0; i < parsedTerritoryDataList.length; i += batchSize) {
+      physicalBatches.push(parsedTerritoryDataList.slice(i, i + batchSize));
+    }
+
+    // Now, for each physical batch, determine how many sheets are needed
+    const allSheets: {
+      id: string;
+      title: string;
+      sheetNumber: number;
+      totalPages: number;
+      rows: any[];
+    }[] = [];
+
+    physicalBatches.forEach((batch, batchIdx) => {
+      // Find max assignments in this batch
+      let maxAsgCount = 0;
+      batch.forEach(item => {
+        if (item.assignments.length > maxAsgCount) {
+          maxAsgCount = item.assignments.length;
+        }
+      });
+
+      // Divide by 4 to see how many sheets (Folhas) we need
+      const sheetsCount = Math.max(1, Math.ceil(maxAsgCount / 4));
+
+      // Get first and last territory number of this batch for labeling
+      const startNum = batch[0]?.number || String(batchIdx * 24 + 1);
+      const endNum = batch[batch.length - 1]?.number || String(batchIdx * 24 + batch.length);
+
+      for (let s = 0; s < sheetsCount; s++) {
+        const sheetRows = batch.map(item => {
+          // slice the 4 assignments for this sheet index
+          const slicedAsg = item.assignments.slice(s * 4, s * 4 + 4);
+
+          // Calculate "Última data concluída" for this sheet
+          let lastCompleted: Date | null = null;
+          if (s === 0) {
+            // First page: base completion date of map
+            lastCompleted = item.baseLastCompletedDate;
+            // Or fallback to the last completion date prior to first assignment if base is empty
+            if (!lastCompleted && item.assignments.length > 0) {
+              const firstShownDate = item.assignments[0].assigned;
+              const completedBefore = item.assignments
+                .filter(asg => asg.completed && asg.completed < firstShownDate)
+                .map(asg => asg.completed as Date);
+              if (completedBefore.length > 0) {
+                completedBefore.sort((a, b) => b.getTime() - a.getTime());
+                lastCompleted = completedBefore[0];
+              }
+            }
+          } else {
+            // Page 2+: it is the completion date of the last assignment in the prior page (at index s * 4 - 1）
+            const prevAsg = item.assignments[s * 4 - 1];
+            lastCompleted = prevAsg ? prevAsg.completed : null;
+          }
+
+          return {
+            id: item.id,
+            number: item.number,
+            name: item.name,
+            lastCompletedDate: lastCompleted,
+            assignments: slicedAsg
+          };
+        });
+
+        // Pad the sheet to exactly 24 rows to guarantee printed layout dimensions
+        while (sheetRows.length < 24) {
+          sheetRows.push({
+            id: `blank-row-padded-${batchIdx}-${s}-${sheetRows.length}`,
+            number: '',
+            name: '',
+            lastCompletedDate: null,
+            assignments: []
+          });
+        }
+
+        allSheets.push({
+          id: `batch-${batchIdx}-sheet-${s}`,
+          title: `Mapas ${startNum} a ${endNum} (Folha ${s + 1})`,
+          sheetNumber: s + 1,
+          totalPages: sheetsCount,
+          rows: sheetRows
+        });
+      }
+    });
+
+    // Fix sheetNumber and totalPages globally so it looks professional (e.g. Page 1 of 4, Page 2 of 4...)
+    const totalGlobalPages = allSheets.length;
+    return allSheets.map((sheet, idx) => ({
+      ...sheet,
+      sheetNumber: idx + 1,
+      totalPages: totalGlobalPages
+    }));
+  }, [territories, endDateStr, serviceYear]);
+
   // Handle Print Action (Safely formats layout to be perfect)
   const handlePrint = () => {
     window.print();
@@ -340,16 +666,42 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
       {/* Dynamic Native Print Inject Style */}
       <style>{`
         @media print {
-          body {
+          /* General print reset */
+          html, body, #root {
             background-color: white !important;
             color: black !important;
-            font-size: 11px !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
-          /* Hide app UI completely */
-          #root, .fixed, header, nav, .bg-opacity-70 {
-            display: none !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
+          /* Hide all page content by default to prevent other dashboard elements from cluttering */
+          body * {
+            visibility: hidden;
+          }
+          /* Allow the modal parent overlay and the report content to be visible */
+          .fixed,
+          #print-superintendent-report,
+          #print-superintendent-report * {
+            visibility: visible !important;
+          }
+          /* Reset overlay constraints to allow infinite scroll flow for printing pages */
+          .fixed {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            display: block !important;
+            overflow: visible !important;
+            z-index: 9999999 !important;
           }
           /* Force report container to show, fill page, and look strictly editorial */
           #print-superintendent-report {
@@ -366,10 +718,48 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
             box-shadow: none !important;
             border: none !important;
             border-radius: 0 !important;
-            z-index: 9999999 !important;
+            overflow: visible !important;
+            max-height: none !important;
           }
-          .no-print {
+          /* Explicitly hide the close buttons, toolbars, headers inside report during print */
+          .no-print,
+          .no-print *,
+          button,
+          .no-print-element {
             display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+          }
+          .s13-printable-container {
+            display: block !important;
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+          }
+          .s13-document-box {
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            margin: 0 0 10mm 0 !important;
+            max-width: 100% !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .s13-page {
+            page-break-after: always !important;
+            break-after: page !important;
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+          }
+          .s13-page:last-child {
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+          }
+          @page {
+            size: ${activeReportTab === 's13' ? 'portrait' : 'landscape'};
+            margin: 8mm;
           }
           .print-grid {
             grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
@@ -381,7 +771,7 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
             background: none !important;
           }
           table {
-            page-break-inside: auto;
+            page-break-inside: avoid;
           }
           tr {
             page-break-inside: avoid;
@@ -419,7 +809,43 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
         {/* Scrollable Report Frame */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 no-scrollbar">
           
-          {/* Print Only Header Banner */}
+          {/* Tab Selector Buttons - No print */}
+          <div className="no-print flex border-b border-slate-200 mb-6">
+            <button 
+              onClick={() => {
+                setActiveReportTab('s13');
+              }}
+              className={`flex-1 py-3.5 text-xs font-black text-center border-b-2 uppercase tracking-wider transition-all ${activeReportTab === 's13' ? 'border-blue-600 text-blue-700 bg-blue-50/10' : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50/60'}`}
+            >
+              Ficha S-13-T Oficial
+            </button>
+            <button 
+              onClick={() => {
+                setActiveReportTab('analytical');
+              }}
+              className={`flex-1 py-3.5 text-xs font-black text-center border-b-2 uppercase tracking-wider transition-all ${activeReportTab === 'analytical' ? 'border-blue-600 text-blue-700 bg-blue-50/10' : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50/60'}`}
+            >
+              Histórico Analítico (Pesquisa & Excel)
+            </button>
+          </div>
+
+          {activeReportTab === 's13' ? (
+            <S13TFormReport
+              sheets={s13Sheets}
+              congregation={congregation}
+              setCongregation={setCongregation}
+              serviceYear={serviceYear}
+              handleServiceYearChange={handleServiceYearChange}
+              handlePrint={handlePrint}
+              formatDateS13={formatDateS13}
+              startDateStr={startDateStr}
+              endDateStr={endDateStr}
+              setStartDateStr={setStartDateStr}
+              setEndDateStr={setEndDateStr}
+            />
+          ) : (
+            <>
+              {/* Print Only Header Banner */}
           <div className="hidden print:block border-b-2 border-double border-slate-800 pb-4 mb-4 text-center">
             <h1 className="text-xl font-black text-slate-950 tracking-tight uppercase">Registro Oficial de Designações e Devoluções de Território</h1>
             <p className="text-[10px] font-mono uppercase tracking-widest text-slate-600 mt-1">
@@ -455,7 +881,7 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
               
               {/* Date Inputs */}
-              <div className="md:col-span-2 grid grid-cols-2 gap-2">
+              <div className="md:col-span-2 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">De (Data Inicial)</label>
                   <div className="relative">
@@ -469,6 +895,35 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
                       className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-4 focus:ring-blue-550/10 focus:border-slate-300"
                     />
                     <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                  <div className="flex items-center justify-between mt-1 px-1">
+                    <button 
+                      type="button" 
+                      onClick={() => adjustDate('start', -1)}
+                      className="text-[9px] font-black text-slate-500 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded transition-all"
+                      title="Voltar 1 Mês"
+                    >
+                      -1 Mês
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setSelectedShortcut('custom');
+                        const today = new Date();
+                        setStartDateStr(new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]);
+                      }}
+                      className="text-[9px] font-bold text-blue-500 hover:text-blue-700 hover:underline px-1 py-0.5"
+                    >
+                      1º do Mês
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => adjustDate('start', 1)}
+                      className="text-[9px] font-black text-slate-500 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded transition-all"
+                      title="Avançar 1 Mês"
+                    >
+                      +1 Mês
+                    </button>
                   </div>
                 </div>
                 <div>
@@ -484,6 +939,34 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
                       className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-4 focus:ring-blue-550/10 focus:border-slate-300"
                     />
                     <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                  <div className="flex items-center justify-between mt-1 px-1">
+                    <button 
+                      type="button" 
+                      onClick={() => adjustDate('end', -1)}
+                      className="text-[9px] font-black text-slate-500 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded transition-all"
+                      title="Voltar 1 Mês"
+                    >
+                      -1 Mês
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setSelectedShortcut('custom');
+                        setEndDateStr(new Date().toISOString().split('T')[0]);
+                      }}
+                      className="text-[9px] font-bold text-blue-500 hover:text-blue-700 hover:underline px-1 py-0.5"
+                    >
+                      Hoje
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => adjustDate('end', 1)}
+                      className="text-[9px] font-black text-slate-500 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded transition-all"
+                      title="Avançar 1 Mês"
+                    >
+                      +1 Mês
+                    </button>
                   </div>
                 </div>
               </div>
@@ -774,6 +1257,8 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
               <p className="text-[8px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">Visto de Inspeção</p>
             </div>
           </div>
+          </>
+          )}
 
         </div>
 

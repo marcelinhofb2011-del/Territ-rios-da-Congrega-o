@@ -747,8 +747,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                             </div>
                         </div>
 
-                        {(activeTab === 'available' || activeTab === 'in_use' || activeTab === 'resting') && (
-                            <div className="mt-3 sm:mt-0 flex items-center gap-2">
+                        <div className="mt-3 sm:mt-0 flex flex-wrap items-center gap-3">
+                            <button 
+                                onClick={() => setShowSuperintendentModal(true)}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded flex items-center gap-2 shadow-sm border border-blue-700 cursor-pointer transition-all active:scale-95"
+                                title="Gerar Relatório S-13 do Superintendente"
+                            >
+                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>Relatório S-13</span>
+                            </button>
+
+                            {(activeTab === 'available' || activeTab === 'in_use' || activeTab === 'resting') && (
                                 <div className="relative">
                                     <input 
                                         type="text" 
@@ -759,8 +770,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                     />
                                     <svg className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
                         {showAddModal && <AddMapModal onClose={() => setShowAddModal(false)} onAdded={() => {}} />}
                         {editingTerritory && <EditMapModal territory={editingTerritory} onClose={() => setEditingTerritory(null)} onSave={() => {}} />}
@@ -916,8 +927,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                         <h1 className="text-3xl font-black text-slate-900 tracking-tight">Status Operacional</h1>
                                         <p className="text-slate-500 font-medium">Controle em tempo real de toda a atividade do sistema.</p>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => setShowAddModal(true)} className="px-4 py-2.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2">
+                                    <div className="flex items-center gap-3">
+                                        <button 
+                                            onClick={() => setShowSuperintendentModal(true)} 
+                                            className="px-4 py-2.5 bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 cursor-pointer"
+                                            title="Gerar Relatório S-13 do Superintendente"
+                                        >
+                                            <svg className="w-4 h-4 text-indigo-100" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            Relatório S-13
+                                        </button>
+                                        <button onClick={() => setShowAddModal(true)} className="px-4 py-2.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2 cursor-pointer">
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
                                             Novo Mapa
                                         </button>
@@ -1197,17 +1218,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                     <div className="flex items-center gap-3">
                                         <button 
                                             onClick={() => setShowSuperintendentModal(true)}
-                                            className="px-4 py-2.5 text-slate-600 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100 transition-all flex items-center gap-2"
+                                            className="px-4 py-2.5 text-white bg-blue-600 hover:bg-blue-700 font-bold text-xs rounded-xl shadow-sm hover:shadow transition-all flex items-center gap-2 border border-blue-700 cursor-pointer"
+                                            title="Abrir o Relatório S-13 para o Superintendente de Serviço"
                                         >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                            PDF
-                                        </button>
-                                        <button 
-                                            onClick={() => setShowSuperintendentModal(true)}
-                                            className="px-4 py-2.5 text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100 transition-all flex items-center gap-2"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2m-6-9a3 3 0 116 0M3 19v-6a2 2 0 012-2h14a2 2 0 012 2v6" /></svg>
-                                            Relatório
+                                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            <span className="uppercase tracking-wider">Superintendente S-13</span>
                                         </button>
                                     </div>
                                 </div>
