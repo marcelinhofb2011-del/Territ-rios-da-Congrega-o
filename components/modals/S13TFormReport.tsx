@@ -242,10 +242,10 @@ export const S13TFormReport: React.FC<S13TFormReportProps> = ({
                       <td className="border-r border-black text-center p-0.5 align-middle leading-tight">
                         {row.assignments[0] ? (
                           <div className="flex flex-col justify-center items-center">
-                            <span className="text-[7.5px] font-sans font-black text-neutral-950 truncate max-w-[68px] uppercase block tracking-tighter" title={row.assignments[0].publisherName}>
+                            <span className="text-[8.5px] font-sans font-black text-black truncate max-w-[68px] uppercase block tracking-tight" title={row.assignments[0].publisherName}>
                               {row.assignments[0].publisherName}
                             </span>
-                            <span className="text-[7px] text-neutral-600 block mt-0.5 font-mono">
+                            <span className="text-[8px] text-black font-bold block mt-0.5 font-mono">
                               {formatDateS13(row.assignments[0].assigned)}
                             </span>
                           </div>
@@ -259,10 +259,10 @@ export const S13TFormReport: React.FC<S13TFormReportProps> = ({
                       <td className="border-r border-black text-center p-0.5 align-middle leading-tight">
                         {row.assignments[1] ? (
                           <div className="flex flex-col justify-center items-center">
-                            <span className="text-[7.5px] font-sans font-black text-neutral-950 truncate max-w-[68px] uppercase block tracking-tighter" title={row.assignments[1].publisherName}>
+                            <span className="text-[8.5px] font-sans font-black text-black truncate max-w-[68px] uppercase block tracking-tight" title={row.assignments[1].publisherName}>
                               {row.assignments[1].publisherName}
                             </span>
-                            <span className="text-[7px] text-neutral-600 block mt-0.5 font-mono">
+                            <span className="text-[8px] text-black font-bold block mt-0.5 font-mono">
                               {formatDateS13(row.assignments[1].assigned)}
                             </span>
                           </div>
@@ -276,10 +276,10 @@ export const S13TFormReport: React.FC<S13TFormReportProps> = ({
                       <td className="border-r border-black text-center p-0.5 align-middle leading-tight">
                         {row.assignments[2] ? (
                           <div className="flex flex-col justify-center items-center">
-                            <span className="text-[7.5px] font-sans font-black text-neutral-950 truncate max-w-[68px] uppercase block tracking-tighter" title={row.assignments[2].publisherName}>
+                            <span className="text-[8.5px] font-sans font-black text-black truncate max-w-[68px] uppercase block tracking-tight" title={row.assignments[2].publisherName}>
                               {row.assignments[2].publisherName}
                             </span>
-                            <span className="text-[7px] text-neutral-600 block mt-0.5 font-mono">
+                            <span className="text-[8px] text-black font-bold block mt-0.5 font-mono">
                               {formatDateS13(row.assignments[2].assigned)}
                             </span>
                           </div>
@@ -293,10 +293,10 @@ export const S13TFormReport: React.FC<S13TFormReportProps> = ({
                       <td className="border-r border-black text-center p-0.5 align-middle leading-tight">
                         {row.assignments[3] ? (
                           <div className="flex flex-col justify-center items-center">
-                            <span className="text-[7.5px] font-sans font-black text-neutral-950 truncate max-w-[68px] uppercase block tracking-tighter" title={row.assignments[3].publisherName}>
+                            <span className="text-[8.5px] font-sans font-black text-black truncate max-w-[68px] uppercase block tracking-tight" title={row.assignments[3].publisherName}>
                               {row.assignments[3].publisherName}
                             </span>
-                            <span className="text-[7px] text-neutral-600 block mt-0.5 font-mono">
+                            <span className="text-[8px] text-black font-bold block mt-0.5 font-mono">
                               {formatDateS13(row.assignments[3].assigned)}
                             </span>
                           </div>
