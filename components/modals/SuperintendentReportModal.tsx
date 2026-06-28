@@ -1159,7 +1159,7 @@ export const SuperintendentReportModal: React.FC<SuperintendentReportModalProps>
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2">
                           <div className="w-5.5 h-5.5 rounded bg-slate-900 text-white flex items-center justify-center text-[8px] font-black">
-                            {item.userName.charAt(0).toUpperCase()}
+                            {item.userName?.charAt(0).toUpperCase() || ''}
                           </div>
                           <span className="text-[11px] font-black text-slate-700 truncate" title={item.userName}>
                             {item.userName}

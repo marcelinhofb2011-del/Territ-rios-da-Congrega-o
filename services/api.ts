@@ -552,6 +552,7 @@ export const deleteTerritory = async (territoryId: string): Promise<void> => {
 
 export const adminResetTerritory = async (territoryId: string, adminUser: User): Promise<void> => {
     const territoryRef = doc(db, 'territories', territoryId);
+    let prevAssignedTo: string | null = null;
     
     try {
         await runTransaction(db, async (transaction) => {
@@ -559,6 +560,7 @@ export const adminResetTerritory = async (territoryId: string, adminUser: User):
             if (!territoryDoc.exists()) throw new Error("Território não encontrado.");
 
             const territoryData = territoryDoc.data();
+            prevAssignedTo = territoryData.assignedTo || null;
             let newHistory = territoryData.history || [];
 
             // Adiciona um registro histórico apenas se o território estava de fato com alguém
@@ -584,6 +586,10 @@ export const adminResetTerritory = async (territoryId: string, adminUser: User):
                 history: newHistory
             });
         });
+
+        if (prevAssignedTo) {
+            await autoCompleteUserRequest(prevAssignedTo);
+        }
     } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `territories/${territoryId}`);
     }
@@ -591,6 +597,7 @@ export const adminResetTerritory = async (territoryId: string, adminUser: User):
 
 export const adminCompleteTerritory = async (territoryId: string, adminUser: User): Promise<void> => {
     const territoryRef = doc(db, 'territories', territoryId);
+    let prevAssignedTo: string | null = null;
     
     try {
         await runTransaction(db, async (transaction) => {
@@ -598,6 +605,7 @@ export const adminCompleteTerritory = async (territoryId: string, adminUser: Use
             if (!territoryDoc.exists()) throw new Error("Território não encontrado.");
 
             const territoryData = territoryDoc.data();
+            prevAssignedTo = territoryData.assignedTo || null;
             let newHistory = territoryData.history || [];
 
             if (territoryData.assignedTo) {
@@ -629,6 +637,10 @@ export const adminCompleteTerritory = async (territoryId: string, adminUser: Use
                 history: newHistory
             });
         });
+
+        if (prevAssignedTo) {
+            await autoCompleteUserRequest(prevAssignedTo);
+        }
     } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `territories/${territoryId}`);
     }
@@ -708,7 +720,7 @@ export const fetchAllRequests = async (): Promise<TerritoryRequest[]> => {
     }
 };
 
-export const requestTerritory = async (user: User): Promise<void> => {
+export const requestTerritory = async (user: User, notes?: string, urgency?: 'low' | 'medium' | 'high'): Promise<void> => {
     const q = query(collection(db, 'requests'), where('userId', '==', user.id), where('status', '==', RequestStatus.PENDING));
     let existing;
     try {
@@ -724,7 +736,9 @@ export const requestTerritory = async (user: User): Promise<void> => {
             userId: user.id,
             userName: user.name,
             requestDate: Timestamp.now(),
-            status: RequestStatus.PENDING
+            status: RequestStatus.PENDING,
+            notes: notes || '',
+            urgency: urgency || 'low'
         });
     } catch (error) {
         handleFirestoreError(error, OperationType.CREATE, 'requests');
@@ -810,7 +824,12 @@ export const assignTerritoryToRequest = async (requestId: string, territoryIds: 
             });
 
             // Update the request status
-            transaction.update(requestRef, { status: RequestStatus.APPROVED });
+            transaction.update(requestRef, { 
+                status: RequestStatus.APPROVED,
+                territoryIds: uniqueIds,
+                territoryNames: territoryNames,
+                territoryNumbers: territoryDocs.map(item => item.doc.data().number)
+            });
             
             // Create a notification
             const notifRef = doc(collection(db, 'notifications'));
@@ -938,7 +957,7 @@ export const updateAssignmentDates = async (territoryId: string, assignmentDate:
     }
 };
 
-export const rejectRequest = async (requestId: string): Promise<void> => {
+export const rejectRequest = async (requestId: string, reason?: string): Promise<void> => {
     try {
         const requestRef = doc(db, 'requests', requestId);
         const requestDoc = await getDoc(requestRef);
@@ -946,13 +965,17 @@ export const rejectRequest = async (requestId: string): Promise<void> => {
         if (!requestDoc.exists()) return;
         const reqData = requestDoc.data();
 
-        await updateDoc(requestRef, { status: RequestStatus.REJECTED });
+        await updateDoc(requestRef, { 
+            status: RequestStatus.REJECTED,
+            rejectionReason: reason || ''
+        });
 
         // Create a notification
         const notifRef = doc(collection(db, 'notifications'));
+        const reasonMsg = reason && reason.trim() !== '' ? ` Motivo: ${reason}` : '';
         await setDoc(notifRef, {
             userId: reqData.userId,
-            message: `Sua solicitação de território foi recusada.`,
+            message: `Sua solicitação de território foi recusada.${reasonMsg}`,
             type: 'warning',
             read: false,
             createdAt: Timestamp.now()
@@ -975,6 +998,24 @@ export const toggleWorkedOn = async (territoryId: string, workedOn: boolean): Pr
         await updateDoc(territoryRef, { workedOn });
     } catch (error: any) {
         handleFirestoreError(error, OperationType.UPDATE, `territories/${territoryId}`);
+    }
+};
+
+export const autoCompleteUserRequest = async (userId: string): Promise<void> => {
+    try {
+        const q = query(
+            collection(db, 'requests'), 
+            where('userId', '==', userId), 
+            where('status', '==', RequestStatus.APPROVED)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+            // Marca a solicitação aprovada mais recente como concluída
+            const docToUpdate = snap.docs[0];
+            await updateDoc(docToUpdate.ref, { status: RequestStatus.COMPLETED });
+        }
+    } catch (e) {
+        console.error("Erro ao auto-concluir solicitação:", e);
     }
 };
 
@@ -1016,6 +1057,9 @@ export const submitReport = async (user: User, territoryId: string, notes: strin
                 history: [...currentHistory, historyEntry]
             });
         });
+
+        // Auto-conclui a solicitação do usuário
+        await autoCompleteUserRequest(user.id);
     } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `territories/${territoryId}`);
     }
@@ -1052,6 +1096,9 @@ export const reversalTerritory = async (user: User, territoryId: string): Promis
                 history: [...currentHistory, historyEntry]
             });
         });
+
+        // Auto-conclui a solicitação do usuário
+        await autoCompleteUserRequest(user.id);
     } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `territories/${territoryId}`);
     }

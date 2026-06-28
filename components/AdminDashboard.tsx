@@ -7,7 +7,7 @@ import {
     fetchCampaigns, createCampaign, updateCampaign, deleteCampaign, setCampaignActive
 } from '../services/api';
 import { formatDate, getDaysRemaining } from '../utils/helpers';
-import { collection, query, where, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, doc, updateDoc, getDocs, limit } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import MapViewerModal from './modals/MapViewerModal';
 import TerritoryHistoryModal from './modals/TerritoryHistoryModal';
@@ -25,6 +25,12 @@ import {
 
 import Sidebar from './Sidebar';
 import TerritoryCard from './TerritoryCard';
+import { 
+    LayoutDashboard, Map as LucideMap, Clock, AlertTriangle, CheckCircle, Calendar, 
+    ChevronRight, Plus, Users, Settings, ClipboardList, TrendingUp, 
+    MapPin, TrendingDown, Sparkles, History, UserCheck, AlertCircle, FileText, RotateCcw,
+    X, Search
+} from 'lucide-react';
 
 const FilterIcon: React.FC = () => (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -47,7 +53,8 @@ const toLocalInputDate = (d: Date) => {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTab, setActiveTab: propSetActiveTab }) => {
     const { user } = useAuth();
     const [territories, setTerritories] = useState<Territory[]>([]);
-    const [requests, setRequests] = useState<TerritoryRequest[]>([]);
+    const [allRequests, setAllRequests] = useState<TerritoryRequest[]>([]);
+    const requests = useMemo(() => allRequests.filter(r => r.status === RequestStatus.PENDING), [allRequests]);
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [localActiveTab, setLocalActiveTab] = useState<'dashboard' | 'available' | 'in_use' | 'history' | 'users' | 'stats' | 'settings'>('dashboard');
@@ -62,6 +69,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
     const [editingTerritory, setEditingTerritory] = useState<Territory | null>(null);
     const [viewHistory, setViewHistory] = useState<Territory | null>(null);
     const [viewingMap, setViewingMap] = useState<Territory | null>(null);
+
+    // Drawer States
+    const [isRequestsDrawerOpen, setIsRequestsDrawerOpen] = useState(false);
+    const [requestsFilter, setRequestsFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'completed'>('all');
+    const [requestsSort, setRequestsSort] = useState<'newest' | 'oldest' | 'urgent'>('newest');
+    const [requestsSearch, setRequestsSearch] = useState('');
+    const [highlightedRequestIds, setHighlightedRequestIds] = useState<string[]>([]);
+    const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+    const [requestToReject, setRequestToReject] = useState<TerritoryRequest | null>(null);
+    const [requestToEdit, setRequestToEdit] = useState<TerritoryRequest | null>(null);
+    const [editNotesInput, setEditNotesInput] = useState('');
+    const [editUrgencyInput, setEditUrgencyInput] = useState<'low' | 'medium' | 'high'>('low');
+    const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
+    const [inUseFilter, setInUseFilter] = useState<'all' | 'overdue' | 'expiring'>('all');
+
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+        const id = Math.random().toString(36).substring(2, 9);
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, 4000);
+    };
 
     const globalHistory = useMemo(() => {
         const allHistory: any[] = [];
@@ -90,6 +119,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
 
     const filteredHistory = useMemo(() => {
         let processed = [...globalHistory];
+        
+        if (historyStatusFilter === 'notes') {
+            processed = processed.filter(h => h.notes && h.notes.trim() !== '');
+        }
         
         if (historySearchTerm) {
             const search = historySearchTerm.toLowerCase();
@@ -162,6 +195,52 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
             </div>
         );
     };
+
+    const reportsAwaitingAnalysis = useMemo(() => {
+        return globalHistory.filter(h => h.notes && h.notes.trim() !== '').length;
+    }, [globalHistory]);
+
+    const filteredRequests = useMemo(() => {
+        let list = [...allRequests];
+
+        // Apply Status Filter
+        if (requestsFilter !== 'all') {
+            list = list.filter(r => r.status === requestsFilter);
+        }
+
+        // Apply Search Filter
+        if (requestsSearch) {
+            const search = requestsSearch.toLowerCase();
+            list = list.filter(r => 
+                (r.userName || '').toLowerCase().includes(search) ||
+                (r.notes || '').toLowerCase().includes(search) ||
+                (r.territoryNumbers || []).some(n => n.toLowerCase().includes(search)) ||
+                (r.territoryNames || []).some(n => n.toLowerCase().includes(search))
+            );
+        }
+
+        // Apply Sorting
+        list.sort((a, b) => {
+            const dateA = a.requestDate ? a.requestDate.getTime() : 0;
+            const dateB = b.requestDate ? b.requestDate.getTime() : 0;
+
+            if (requestsSort === 'newest') {
+                return dateB - dateA;
+            } else if (requestsSort === 'oldest') {
+                return dateA - dateB;
+            } else if (requestsSort === 'urgent') {
+                const urgencyWeight = (urgency: string) => {
+                    if (urgency === 'high') return 3;
+                    if (urgency === 'medium') return 2;
+                    return 1;
+                };
+                return urgencyWeight(b.urgency || 'low') - urgencyWeight(a.urgency || 'low') || dateB - dateA;
+            }
+            return 0;
+        });
+
+        return list;
+    }, [allRequests, requestsFilter, requestsSearch, requestsSort]);
 
 
 
@@ -309,11 +388,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
         }, (err) => {
             console.error("Erro no listener de usuários:", err);
         });
-        const requestsQuery = query(collection(db, 'requests'), where('status', '==', RequestStatus.PENDING));
+        const requestsQuery = query(collection(db, 'requests'));
         const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
             const reqs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, requestDate: parseDate(doc.data().requestDate) || new Date() } as TerritoryRequest)).sort((a, b) => b.requestDate.getTime() - a.requestDate.getTime());
-            console.log("AdminDashboard: Pending requests:", reqs.length);
-            setRequests(reqs);
+            console.log("AdminDashboard: Total requests:", reqs.length);
+            setAllRequests(reqs);
         }, (err) => {
             console.error("Erro no listener de solicitações:", err);
         });
@@ -354,6 +433,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
             unsubscribeCampaigns();
         };
     }, [loading, user]);
+
+    useEffect(() => {
+        const handleToggle = () => {
+            setIsRequestsDrawerOpen(prev => !prev);
+        };
+        window.addEventListener('toggle-requests-drawer', handleToggle);
+        return () => window.removeEventListener('toggle-requests-drawer', handleToggle);
+    }, []);
 
     // Handlers
     // Campaigns Handlers
@@ -552,6 +639,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
             }
         });
     };
+
+    const handleRejectRequestWithReason = async (requestId: string, reason: string) => {
+        try {
+            await rejectRequest(requestId, reason);
+            showToast(`Solicitação recusada com sucesso.`, 'success');
+        } catch (err: any) {
+            console.error(err);
+            showToast(`Erro ao recusar solicitação: ${err.message || err}`, 'error');
+        }
+    };
+
+    const handleEditRequest = async (requestId: string, notes: string, urgency: 'low' | 'medium' | 'high') => {
+        try {
+            await updateDoc(doc(db, 'requests', requestId), {
+                notes,
+                urgency
+            });
+            showToast(`Solicitação atualizada com sucesso.`, 'success');
+            setRequestToEdit(null);
+        } catch (err: any) {
+            console.error(err);
+            showToast(`Erro ao editar solicitação: ${err.message || err}`, 'error');
+        }
+    };
     const handleDeleteTerritory = async (id: string) => { 
         setConfirmAction({
             title: "Excluir Território",
@@ -678,13 +789,74 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
     }, [territories, searchTerm, localityFilter]);
 
     const availableMaps = useMemo(() => displayTerritories.filter(t => t.status === TerritoryStatus.AVAILABLE), [displayTerritories]);
-    const inUseMaps = useMemo(() => displayTerritories.filter(t => t.status === TerritoryStatus.IN_USE), [displayTerritories]);
+    const inUseMaps = useMemo(() => {
+        let base = displayTerritories.filter(t => t.status === TerritoryStatus.IN_USE);
+        if (inUseFilter === 'overdue') {
+            const now = new Date();
+            base = base.filter(t => t.dueDate && t.dueDate < now);
+        } else if (inUseFilter === 'expiring') {
+            const now = new Date();
+            const tenDaysFromNow = new Date();
+            tenDaysFromNow.setDate(now.getDate() + 10);
+            base = base.filter(t => t.dueDate && t.dueDate >= now && t.dueDate <= tenDaysFromNow);
+        }
+        return base;
+    }, [displayTerritories, inUseFilter]);
     const restingMaps = useMemo(() => displayTerritories.filter(t => t.status === TerritoryStatus.RESTING), [displayTerritories]);
     const requestedMaps = useMemo(() => territories.filter(t => t.status === TerritoryStatus.REQUESTED), [territories]);
 
     const overdueMaps = useMemo(() => {
         const now = new Date();
         return territories.filter(t => t.status === TerritoryStatus.IN_USE && t.dueDate && t.dueDate < now);
+    }, [territories]);
+
+    const expiringSoonMaps = useMemo(() => {
+        const now = new Date();
+        const tenDaysFromNow = new Date();
+        tenDaysFromNow.setDate(now.getDate() + 10);
+        return territories.filter(t => 
+            t.status === TerritoryStatus.IN_USE && 
+            t.dueDate && 
+            t.dueDate >= now && 
+            t.dueDate <= tenDaysFromNow
+        );
+    }, [territories]);
+
+    const localityCoverages = useMemo(() => {
+        const counts: { [key: string]: { total: number; available: number } } = {};
+        territories.forEach(t => {
+            if (!t.locality) return;
+            if (!counts[t.locality]) {
+                counts[t.locality] = { total: 0, available: 0 };
+            }
+            counts[t.locality].total += 1;
+            if (t.status === TerritoryStatus.AVAILABLE) {
+                counts[t.locality].available += 1;
+            }
+        });
+        return Object.entries(counts).map(([name, data]) => ({
+            name,
+            total: data.total,
+            available: data.available,
+            coverage: data.total > 0 ? Math.round(((data.total - data.available) / data.total) * 100) : 0
+        })).sort((a, b) => b.total - a.total).slice(0, 5);
+    }, [territories]);
+
+    const recentMovements = useMemo(() => {
+        const items = territories.filter(t => t.assignedAt || t.lastCompletedDate);
+        return items.map(t => {
+            const isAssigned = t.status === TerritoryStatus.IN_USE;
+            const date = isAssigned ? t.assignedAt : t.lastCompletedDate;
+            const rawDate = date ? (date instanceof Date ? date : (typeof date.toDate === 'function' ? date.toDate() : (typeof date === 'object' && date.seconds ? new Date(date.seconds * 1000) : new Date(date)))) : new Date();
+            return {
+                id: t.id,
+                territoryNumber: t.number,
+                territoryName: t.name,
+                publisherName: t.assignedToName || 'Sistema',
+                type: isAssigned ? 'assigned' : 'completed',
+                date: rawDate
+            };
+        }).sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 5);
     }, [territories]);
 
     const localities = useMemo(() => {
@@ -815,7 +987,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                     <div className="p-8 overflow-y-auto flex-1 space-y-8 no-scrollbar">
                                         <div className="p-6 bg-blue-50 rounded-[2rem] border border-blue-100 flex items-center gap-5">
                                             <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center font-black text-2xl text-blue-600 shadow-xl shadow-blue-100/50">
-                                                {requests.find(r => r.id === fulfillingRequestId)?.userName.charAt(0).toUpperCase()}
+                                                {requests.find(r => r.id === fulfillingRequestId)?.userName?.charAt(0).toUpperCase() || ''}
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Solicitado por</p>
@@ -921,116 +1093,452 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                         )}
 
                         {activeTab === 'dashboard' && (
-                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-                                <div className="flex items-center justify-between">
+                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                
+                                {/* Welcome & Action Row */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <div>
-                                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">Status Operacional</h1>
-                                        <p className="text-slate-500 font-medium">Controle em tempo real de toda a atividade do sistema.</p>
+                                        <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+                                            Status Operacional <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
+                                        </h1>
+                                        <p className="text-slate-400 font-semibold text-xs mt-1">
+                                            Controle em tempo real de toda a atividade do sistema de territórios.
+                                        </p>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <button 
                                             onClick={() => setShowSuperintendentModal(true)} 
-                                            className="px-4 py-2.5 bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 cursor-pointer"
+                                            className="px-4 py-2.5 bg-white border border-slate-150 text-slate-700 hover:text-slate-900 font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-xs hover:bg-slate-50 hover:shadow-sm active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
                                             title="Gerar Relatório S-13 do Superintendente"
                                         >
-                                            <svg className="w-4 h-4 text-indigo-100" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                            Relatório S-13
+                                            <FileText className="w-4 h-4 text-slate-500" />
+                                            <span>Relatório S-13</span>
                                         </button>
-                                        <button onClick={() => setShowAddModal(true)} className="px-4 py-2.5 bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-2 cursor-pointer">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
-                                            Novo Mapa
+                                        <button 
+                                            onClick={() => setShowAddModal(true)} 
+                                            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                            <span>Novo Mapa</span>
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-8 px-2">
+                                {/* Redesigned Indicators into Modern Cards */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
                                     {[
-                                        { label: 'Total de Mapas', value: stats.total, unit: 'território', color: 'text-slate-700', hover: 'hover:text-slate-800', icon: '' },
-                                        { label: 'Disponíveis', value: stats.available, unit: 'território', color: 'text-emerald-600', hover: 'hover:text-emerald-700', icon: 'M5 13l4 4L19 7' },
-                                        { label: 'Atribuídos', value: stats.inUse, unit: 'designado', color: 'text-blue-600', hover: 'hover:text-blue-700', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
-                                        { label: 'Em Descanso', value: stats.resting, unit: 'Aguardando liberação', color: 'text-amber-600', hover: 'hover:text-amber-700', icon: '' },
-                                        { label: 'Atrasados', value: overdueMaps.length, unit: 'território', color: 'text-red-500', hover: 'hover:text-red-600', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' }
-                                    ].map(s => (
-                                        <div key={s.label} className="group transition-all">
-                                            <p className="text-[11px] font-black text-slate-600 uppercase tracking-widest mb-3 group-hover:text-slate-900 transition-colors">{s.label}</p>
-                                            <div className={`flex flex-col sm:flex-row sm:items-baseline gap-1 font-black tracking-tighter ${s.color} ${s.hover} transition-colors`}>
-                                                <span className="text-5xl leading-none font-black">{s.value}</span>
-                                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mt-1 sm:mt-0">{s.unit}</span>
+                                        { 
+                                            label: 'Total de Mapas', 
+                                            value: stats.total, 
+                                            desc: 'Registrados no sistema', 
+                                            color: 'from-slate-50 to-slate-100/50 border-slate-100 text-slate-800', 
+                                            iconColor: 'bg-slate-100 text-slate-600',
+                                            icon: ClipboardList 
+                                        },
+                                        { 
+                                            label: 'Disponíveis', 
+                                            value: stats.available, 
+                                            desc: 'Prontos para atribuição', 
+                                            color: 'from-emerald-50/50 to-emerald-100/10 border-emerald-100/60 text-emerald-800', 
+                                            iconColor: 'bg-emerald-100/60 text-emerald-750',
+                                            icon: CheckCircle 
+                                        },
+                                        { 
+                                            label: 'Atribuídos', 
+                                            value: stats.inUse, 
+                                            desc: 'Com publicadores', 
+                                            color: 'from-purple-50/50 to-purple-100/10 border-purple-100/60 text-purple-800', 
+                                            iconColor: 'bg-purple-100/60 text-purple-750',
+                                            icon: UserCheck 
+                                        },
+                                        { 
+                                            label: 'Em Descanso', 
+                                            value: stats.resting, 
+                                            desc: 'Aguardando liberação', 
+                                            color: 'from-amber-50/40 to-amber-100/10 border-amber-100/60 text-amber-800', 
+                                            iconColor: 'bg-amber-100/50 text-amber-700',
+                                            icon: Clock 
+                                        },
+                                        { 
+                                            label: 'Atrasados', 
+                                            value: overdueMaps.length, 
+                                            desc: 'Passaram do prazo de 4 meses', 
+                                            color: 'from-rose-50/50 to-rose-100/10 border-rose-100/60 text-rose-800', 
+                                            iconColor: 'bg-rose-100/50 text-rose-750',
+                                            icon: AlertTriangle 
+                                        }
+                                    ].map((s, idx) => {
+                                        const CardIcon = s.icon;
+                                        return (
+                                            <div 
+                                                key={s.label} 
+                                                className={`p-5 rounded-[20px] bg-gradient-to-br ${s.color} border shadow-xs hover:shadow-md hover:scale-[1.02] transition-all duration-300 flex flex-col justify-between gap-4`}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">{s.label}</span>
+                                                    <div className={`p-2 rounded-xl ${s.iconColor}`}>
+                                                        <CardIcon className="w-4 h-4" />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-4xl font-extrabold tracking-tight leading-none">{s.value}</span>
+                                                    <p className="text-[10px] font-bold text-slate-400 mt-1.5">{s.desc}</p>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
 
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 pt-8">
-                                    {requests.length > 0 && (
-                                        <div className="col-span-1 space-y-6">
-                                            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                                                <h2 className="text-xl font-black text-slate-900 tracking-tight">Solicitações</h2>
-                                                <span className="w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px] font-black">{requests.length}</span>
-                                            </div>
-                                            <div className="divide-y divide-slate-100">
-                                                {requests.slice(0, 4).map(req => (
-                                                    <div key={req.id} className="py-4 flex items-center justify-between group">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center font-black text-sm border border-slate-100 uppercase">
-                                                                {req.userName.charAt(0)}
-                                                            </div>
-                                                            <div>
-                                                                <p className="font-black text-slate-900 text-sm leading-none mb-1">{req.userName}</p>
-                                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{formatDate(req.requestDate)}</p>
-                                                            </div>
-                                                        </div>
-                                                        <button 
-                                                            onClick={() => {
-                                                                setFulfillingRequestId(req.id);
-                                                                setSelectedMapsForRequest([]);
-                                                            }} 
-                                                            className="p-2 text-slate-300 hover:text-blue-600 transition-all"
-                                                        >
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                                {/* Main Bento Dashboard Grid */}
+                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
+                                    
+                                    {/* Column 1: Alerts and Actions (8 cols on lg) */}
+                                    <div className="lg:col-span-8 space-y-6">
 
-                                    <div className="col-span-1 space-y-6">
-                                        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                                            <h2 className="text-xl font-black text-slate-900 tracking-tight">Atrasos</h2>
-                                            {overdueMaps.length > 0 && <span className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] font-black">{overdueMaps.length}</span>}
-                                        </div>
-                                        {overdueMaps.length > 0 ? (
-                                            <div className="divide-y divide-slate-100">
-                                                {overdueMaps.slice(0, 4).map(t => (
-                                                    <div key={t.id} className="py-4 flex items-center justify-between group">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-sm">
-                                                                {t.number}
-                                                            </div>
-                                                            <div>
-                                                                <p className="font-black text-slate-900 text-sm leading-none mb-1">{t.assignedToName}</p>
-                                                                <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest tabular-nums">Vencido em {formatDate(t.dueDate)}</p>
-                                                            </div>
-                                                        </div>
-                                                        <button 
-                                                            onClick={() => handleResetTerritory(t.id)} 
-                                                            className="p-2 text-slate-300 hover:text-red-600 transition-all"
-                                                        >
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                                        </button>
-                                                    </div>
-                                                ))}
+                                        {/* Ações que exigem sua atenção Bento Card block */}
+                                        <div className="p-6 bg-slate-50/50 border border-slate-100 rounded-[24px] space-y-4">
+                                            <div className="flex items-center gap-2">
+                                                <Sparkles className="w-4.5 h-4.5 text-blue-600 animate-pulse" />
+                                                <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest">Ações que exigem sua atenção</h2>
                                             </div>
-                                        ) : (
-                                            <div className="py-12 border-2 border-dashed border-slate-100 rounded-[2rem] flex items-center justify-center">
-                                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest italic opacity-50">Nenhum atraso</p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                
+                                                {/* Solicitações */}
+                                                <button 
+                                                    onClick={() => setIsRequestsDrawerOpen(true)}
+                                                    className="p-4 bg-white hover:bg-slate-50 border border-slate-100/80 rounded-2xl shadow-xs hover:shadow-md transition-all text-left flex items-start gap-3.5 group cursor-pointer"
+                                                >
+                                                    <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-base shrink-0 group-hover:scale-110 transition-transform">
+                                                        🔔
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h4 className="font-extrabold text-slate-800 text-xs leading-snug group-hover:text-blue-600 transition-colors">
+                                                            {requests.length} Solicitações Pendentes
+                                                        </h4>
+                                                        <p className="text-[10px] text-slate-400 font-semibold leading-normal mt-0.5">Analise pedidos e atribua mapas de territórios.</p>
+                                                    </div>
+                                                </button>
+
+                                                {/* Devolução */}
+                                                <button 
+                                                    onClick={() => { setActiveTab('in_use'); setInUseFilter('expiring'); }}
+                                                    className="p-4 bg-white hover:bg-slate-50 border border-slate-100/80 rounded-2xl shadow-xs hover:shadow-md transition-all text-left flex items-start gap-3.5 group cursor-pointer"
+                                                >
+                                                    <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-base shrink-0 group-hover:scale-110 transition-transform">
+                                                        ⏳
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h4 className="font-extrabold text-slate-800 text-xs leading-snug group-hover:text-amber-600 transition-colors">
+                                                            {expiringSoonMaps.length} Aguardando Devolução
+                                                        </h4>
+                                                        <p className="text-[10px] text-slate-400 font-semibold leading-normal mt-0.5">Mapas vencendo nos próximos 10 dias de trabalho.</p>
+                                                    </div>
+                                                </button>
+
+                                                {/* Atrasados */}
+                                                <button 
+                                                    onClick={() => { setActiveTab('in_use'); setInUseFilter('overdue'); }}
+                                                    className="p-4 bg-white hover:bg-slate-50 border border-slate-100/80 rounded-2xl shadow-xs hover:shadow-md transition-all text-left flex items-start gap-3.5 group cursor-pointer"
+                                                >
+                                                    <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-base shrink-0 group-hover:scale-110 transition-transform">
+                                                        ⚠️
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h4 className="font-extrabold text-slate-800 text-xs leading-snug group-hover:text-rose-600 transition-colors">
+                                                            {overdueMaps.length} Mapas em Atraso
+                                                        </h4>
+                                                        <p className="text-[10px] text-slate-400 font-semibold leading-normal mt-0.5">Mapas com prazo expirado (mais de 4 meses).</p>
+                                                    </div>
+                                                </button>
+
+                                                {/* Relatórios */}
+                                                <button 
+                                                    onClick={() => { setActiveTab('history'); setHistoryStatusFilter('notes'); setHistorySearchTerm(''); }}
+                                                    className="p-4 bg-white hover:bg-slate-50 border border-slate-100/80 rounded-2xl shadow-xs hover:shadow-md transition-all text-left flex items-start gap-3.5 group cursor-pointer"
+                                                >
+                                                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-base shrink-0 group-hover:scale-110 transition-transform">
+                                                        📄
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h4 className="font-extrabold text-slate-800 text-xs leading-snug group-hover:text-emerald-600 transition-colors">
+                                                            {reportsAwaitingAnalysis} Relatórios Enviados
+                                                        </h4>
+                                                        <p className="text-[10px] text-slate-400 font-semibold leading-normal mt-0.5">Comentários e notas enviados pelos publicadores.</p>
+                                                    </div>
+                                                </button>
+
+                                            </div>
+                                        </div>
+
+                                        {/* Pending Requests */}
+                                        {requests.length > 0 && (
+                                            <div className="p-6 bg-white border border-slate-100 rounded-[20px] shadow-xs">
+                                                <div className="flex items-center justify-between border-b border-slate-50 pb-4 mb-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
+                                                        <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Solicitações de Territórios</h2>
+                                                    </div>
+                                                    <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black">{requests.length} pendentes</span>
+                                                </div>
+                                                <div className="divide-y divide-slate-50">
+                                                    {requests.slice(0, 4).map(req => (
+                                                        <div key={req.id} className="py-3.5 flex items-center justify-between group first:pt-0 last:pb-0">
+                                                            <div className="flex items-center gap-3.5">
+                                                                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center font-black text-sm uppercase shadow-xs">
+                                                                    {req.userName?.charAt(0) || ''}
+                                                                </div>
+                                                                <div>
+                                                                    <p className="font-extrabold text-slate-800 text-sm leading-tight">{req.userName}</p>
+                                                                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1 flex items-center gap-1">
+                                                                        <Calendar className="w-3 h-3" />
+                                                                        {formatDate(req.requestDate)}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setFulfillingRequestId(req.id);
+                                                                    setSelectedMapsForRequest([]);
+                                                                }} 
+                                                                className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs rounded-lg active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+                                                            >
+                                                                <span>Atender</span>
+                                                                <ChevronRight className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
+
+                                        {/* Overdue Maps Section */}
+                                        <div className="p-6 bg-white border border-slate-100 rounded-[20px] shadow-xs">
+                                            <div className="flex items-center justify-between border-b border-slate-50 pb-4 mb-4">
+                                                <div className="flex items-center gap-2">
+                                                    <AlertTriangle className="w-4 h-4 text-rose-500" />
+                                                    <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Territórios Atrasados</h2>
+                                                </div>
+                                                {overdueMaps.length > 0 && (
+                                                    <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-black">
+                                                        {overdueMaps.length} atrasados
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {overdueMaps.length > 0 ? (
+                                                <div className="divide-y divide-slate-50">
+                                                    {overdueMaps.slice(0, 4).map(t => (
+                                                        <div key={t.id} className="py-3.5 flex items-center justify-between group first:pt-0 last:pb-0">
+                                                            <div className="flex items-center gap-3.5">
+                                                                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-extrabold text-sm shadow-xs group-hover:bg-blue-600 transition-colors">
+                                                                    {t.number}
+                                                                </div>
+                                                                <div>
+                                                                    <p className="font-extrabold text-slate-800 text-sm leading-tight">{t.assignedToName}</p>
+                                                                    <p className="text-[9px] text-rose-600 font-extrabold uppercase tracking-widest mt-1 flex items-center gap-1 leading-none">
+                                                                        <AlertCircle className="w-3 h-3 text-rose-500" />
+                                                                        Atrasado desde: {formatDate(t.dueDate)}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <button 
+                                                                onClick={() => handleResetTerritory(t.id)} 
+                                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all active:scale-95 cursor-pointer"
+                                                                title="Estornar Território"
+                                                            >
+                                                                <RotateCcw className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="py-8 text-center text-slate-400 font-semibold text-xs italic">
+                                                    Nenhum território em atraso no momento. Excelente trabalho!
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Expiring Soon Maps Section */}
+                                        <div className="p-6 bg-white border border-slate-100 rounded-[20px] shadow-xs">
+                                            <div className="flex items-center justify-between border-b border-slate-50 pb-4 mb-4">
+                                                <div className="flex items-center gap-2">
+                                                    <Clock className="w-4 h-4 text-amber-500" />
+                                                    <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Territórios Para Vencer</h2>
+                                                </div>
+                                                {expiringSoonMaps.length > 0 && (
+                                                    <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black">
+                                                        {expiringSoonMaps.length} próximos
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {expiringSoonMaps.length > 0 ? (
+                                                <div className="divide-y divide-slate-50">
+                                                    {expiringSoonMaps.slice(0, 4).map(t => (
+                                                        <div key={t.id} className="py-3.5 flex items-center justify-between group first:pt-0 last:pb-0">
+                                                            <div className="flex items-center gap-3.5">
+                                                                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-extrabold text-sm">
+                                                                    {t.number}
+                                                                </div>
+                                                                <div>
+                                                                    <p className="font-extrabold text-slate-800 text-sm leading-tight">{t.assignedToName}</p>
+                                                                    <p className="text-[9px] text-amber-600 font-extrabold uppercase tracking-widest mt-1 flex items-center gap-1 leading-none">
+                                                                        <Calendar className="w-3 h-3 text-amber-500" />
+                                                                        Vence em: {formatDate(t.dueDate)} ({getDaysRemaining(t.dueDate)} dias restantes)
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-[10px] font-black text-amber-600 uppercase bg-amber-50 px-2.5 py-0.5 rounded-full">
+                                                                Atenção
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="py-8 text-center text-slate-400 font-semibold text-xs italic">
+                                                    Nenhum território vencendo nos próximos 10 dias.
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Distribution Map & Locality Coverages (As requested) */}
+                                        <div className="p-6 bg-white border border-slate-100 rounded-[20px] shadow-xs">
+                                            <div className="border-b border-slate-50 pb-4 mb-4">
+                                                <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Mapa de Distribuição por Localidade</h2>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Nível de cobertura ativa por bairro ou setor</p>
+                                            </div>
+                                            <div className="space-y-4">
+                                                {localityCoverages.map(loc => (
+                                                    <div key={loc.name} className="space-y-1.5">
+                                                        <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+                                                            <span className="flex items-center gap-1.5">
+                                                                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                                                {loc.name}
+                                                            </span>
+                                                            <span className="text-slate-500">{loc.total - loc.available}/{loc.total} mapas ({loc.coverage}%)</span>
+                                                        </div>
+                                                        <div className="w-full bg-slate-50 h-2 rounded-full overflow-hidden border border-slate-100/40">
+                                                            <div 
+                                                                className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500"
+                                                                style={{ width: `${loc.coverage}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {localityCoverages.length === 0 && (
+                                                    <div className="py-8 text-center text-slate-400 font-semibold text-xs italic">
+                                                        Nenhuma localidade encontrada.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
                                     </div>
+
+                                    {/* Column 2: History & Logs (4 cols on lg) */}
+                                    <div className="lg:col-span-4 space-y-6">
+
+                                        {/* Quick Coverage Chart representation */}
+                                        <div className="p-6 bg-white border border-slate-100 rounded-[20px] shadow-xs">
+                                            <div className="border-b border-slate-50 pb-4 mb-4">
+                                                <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Proporção de Status</h2>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Estatísticas gerais de trabalho</p>
+                                            </div>
+                                            <div className="space-y-4 pt-2">
+                                                {/* Segmented Progress Bar */}
+                                                <div className="w-full bg-slate-100 h-4.5 rounded-full overflow-hidden flex border border-slate-100 shadow-inner">
+                                                    {stats.total > 0 ? (
+                                                        <>
+                                                            <div 
+                                                                className="h-full bg-emerald-500 transition-all" 
+                                                                style={{ width: `${Math.round((stats.available / stats.total) * 100)}%` }}
+                                                                title={`Disponíveis: ${stats.available}`}
+                                                            />
+                                                            <div 
+                                                                className="h-full bg-purple-500 transition-all" 
+                                                                style={{ width: `${Math.round((stats.inUse / stats.total) * 100)}%` }}
+                                                                title={`Atribuídos: ${stats.inUse}`}
+                                                            />
+                                                            <div 
+                                                                className="h-full bg-amber-500 transition-all" 
+                                                                style={{ width: `${Math.round((stats.resting / stats.total) * 100)}%` }}
+                                                                title={`Descanso: ${stats.resting}`}
+                                                            />
+                                                        </>
+                                                    ) : (
+                                                        <div className="w-full bg-slate-100 h-full" />
+                                                    )}
+                                                </div>
+
+                                                {/* Legend */}
+                                                <div className="space-y-2.5 pt-2">
+                                                    <div className="flex justify-between items-center text-xs font-bold text-slate-600">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <span className="w-3 h-3 rounded-full bg-emerald-500" />
+                                                            Disponíveis
+                                                        </span>
+                                                        <span>{stats.total > 0 ? Math.round((stats.available / stats.total) * 100) : 0}%</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-xs font-bold text-slate-600">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <span className="w-3 h-3 rounded-full bg-purple-500" />
+                                                            Atribuídos
+                                                        </span>
+                                                        <span>{stats.total > 0 ? Math.round((stats.inUse / stats.total) * 100) : 0}%</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-xs font-bold text-slate-600">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <span className="w-3 h-3 rounded-full bg-amber-500" />
+                                                            Em Descanso
+                                                        </span>
+                                                        <span>{stats.total > 0 ? Math.round((stats.resting / stats.total) * 100) : 0}%</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Últimas Movimentações (As requested) */}
+                                        <div className="p-6 bg-white border border-slate-100 rounded-[20px] shadow-xs">
+                                            <div className="flex items-center justify-between border-b border-slate-50 pb-4 mb-4">
+                                                <div className="flex items-center gap-2">
+                                                    <History className="w-4 h-4 text-slate-500" />
+                                                    <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Últimas Movimentações</h2>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-4.5">
+                                                {recentMovements.map((mov, mIdx) => (
+                                                    <div key={`${mov.id}-${mIdx}`} className="flex gap-3 text-xs">
+                                                        <div className="flex flex-col items-center shrink-0">
+                                                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-extrabold text-xs shadow-xs text-white bg-gradient-to-tr ${
+                                                                mov.type === 'assigned' ? 'from-purple-500 to-indigo-500' : 'from-emerald-500 to-teal-500'
+                                                            }`}>
+                                                                {mov.territoryNumber}
+                                                            </div>
+                                                            {mIdx !== recentMovements.length - 1 && (
+                                                                <div className="w-0.5 bg-slate-100 grow mt-2 min-h-[16px]" />
+                                                            )}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="font-extrabold text-slate-800 leading-tight">
+                                                                {mov.type === 'assigned' ? 'Atribuído a' : 'Concluído por'} {mov.publisherName}
+                                                            </p>
+                                                            <p className="text-[10px] text-slate-400 mt-1">{mov.territoryName}</p>
+                                                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mt-1">
+                                                                {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(mov.date)}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {recentMovements.length === 0 && (
+                                                    <div className="py-8 text-center text-slate-400 font-semibold text-xs italic">
+                                                        Nenhuma movimentação registrada.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                    </div>
+
                                 </div>
+
                             </div>
                         )}
 
@@ -1101,6 +1609,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                             >
                                                 <option value="all">Todas as Localidades</option>
                                                 {localities.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <select 
+                                                value={inUseFilter}
+                                                onChange={(e) => setInUseFilter(e.target.value as any)}
+                                                className="bg-slate-100/50 border-transparent rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:bg-white focus:border-slate-200 transition-all"
+                                            >
+                                                <option value="all">Todos em Uso</option>
+                                                <option value="overdue">Em Atraso (Expirados)</option>
+                                                <option value="expiring">Próximos do Vencimento (≤ 10 dias)</option>
                                             </select>
                                         </div>
                                     </div>
@@ -1332,7 +1851,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                         <div key={u.id} className="group py-8 border-b border-slate-100 last:border-0 transition-all">
                                             <div className="flex items-center gap-6 mb-8">
                                                 <div className={`w-16 h-16 rounded-[2rem] flex items-center justify-center text-white font-black text-2xl transition-transform group-hover:scale-105 shadow-xl ${u.role === 'admin' ? 'bg-slate-900' : 'bg-slate-200 text-slate-500'}`}>
-                                                    {u.name.charAt(0).toUpperCase()}
+                                                    {u.name?.charAt(0).toUpperCase() || ''}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 mb-1">
@@ -1366,54 +1885,93 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                         )}
 
                         {activeTab === 'stats' && (
-                            <div className="space-y-16 animate-in fade-in slide-in-from-bottom-4">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-20">
-                                    <div className="space-y-8">
-                                        <div>
-                                            <h3 className="text-2xl font-black text-slate-900 tracking-tight">Distribuição</h3>
-                                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Por status operacional</p>
+                            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+                                {/* Header / Summary */}
+                                <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl">
+                                    <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Resumo Geral dos Territórios</h3>
+                                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                                        Indicadores numéricos e operacionais atualizados em tempo real, organizados para facilitar a tomada de decisão.
+                                    </p>
+                                </div>
+
+                                {/* Main Metrics Grid */}
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                                    {[
+                                        { label: 'Total', value: stats.total, color: 'border-slate-300 text-slate-900 bg-slate-50/50' },
+                                        { label: 'Disponíveis', value: stats.available, color: 'border-emerald-200 text-emerald-700 bg-emerald-50/20' },
+                                        { label: 'Em Uso', value: stats.inUse, color: 'border-blue-200 text-blue-700 bg-blue-50/20' },
+                                        { label: 'Solicitados', value: stats.requested, color: 'border-amber-200 text-amber-700 bg-amber-50/20' },
+                                        { label: 'Fechados', value: stats.closed, color: 'border-rose-200 text-rose-700 bg-rose-50/20' },
+                                        { label: 'Em Descanso', value: stats.resting, color: 'border-purple-200 text-purple-700 bg-purple-50/20' },
+                                    ].map((metric) => (
+                                        <div key={metric.label} className={`border p-5 rounded-2xl flex flex-col justify-between ${metric.color}`}>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{metric.label}</span>
+                                            <span className="text-3xl font-black tracking-tight mt-2">{metric.value}</span>
                                         </div>
-                                        <div className="h-80 w-full">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <PieChart>
-                                                    <Pie
-                                                        data={stats.pieData}
-                                                        cx="50%"
-                                                        cy="50%"
-                                                        innerRadius={80}
-                                                        outerRadius={120}
-                                                        paddingAngle={10}
-                                                        stroke="none"
-                                                        dataKey="value"
-                                                    >
-                                                        {stats.pieData.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip 
-                                                        contentStyle={{ backgroundColor: '#fff', borderRadius: '16px', border: 'none', boxShadow: '0 20px 40px rgba(0,0,0,0.05)', fontWeight: 'bold', fontSize: '10px' }}
-                                                    />
-                                                </PieChart>
-                                            </ResponsiveContainer>
+                                    ))}
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                    {/* Operational Distribution Table */}
+                                    <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-6">
+                                        <div>
+                                            <h4 className="text-base font-black text-slate-900 tracking-tight uppercase">Status Operacional</h4>
+                                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Detalhamento proporcional</p>
+                                        </div>
+                                        <div className="divide-y divide-slate-100">
+                                            {[
+                                                { label: 'Disponíveis', count: stats.available, pct: stats.total ? Math.round((stats.available / stats.total) * 100) : 0, bg: 'bg-emerald-500' },
+                                                { label: 'Em Uso', count: stats.inUse, pct: stats.total ? Math.round((stats.inUse / stats.total) * 100) : 0, bg: 'bg-blue-500' },
+                                                { label: 'Solicitados', count: stats.requested, pct: stats.total ? Math.round((stats.requested / stats.total) * 100) : 0, bg: 'bg-amber-500' },
+                                                { label: 'Fechados', count: stats.closed, pct: stats.total ? Math.round((stats.closed / stats.total) * 100) : 0, bg: 'bg-rose-500' },
+                                                { label: 'Em Descanso', count: stats.resting, pct: stats.total ? Math.round((stats.resting / stats.total) * 100) : 0, bg: 'bg-purple-500' },
+                                            ].map((item) => (
+                                                <div key={item.label} className="py-4 flex items-center justify-between gap-4">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex justify-between items-center mb-1.5">
+                                                            <span className="text-xs font-bold text-slate-800">{item.label}</span>
+                                                            <span className="text-xs font-mono font-black text-slate-900">{item.count} <span className="text-slate-400 font-normal text-[10px]">({item.pct}%)</span></span>
+                                                        </div>
+                                                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                                            <div className={`h-full ${item.bg}`} style={{ width: `${item.pct}%` }} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
 
-                                    <div className="space-y-8">
+                                    {/* Sector Distribution List */}
+                                    <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-6">
                                         <div>
-                                            <h3 className="text-2xl font-black text-slate-900 tracking-tight">Popularidade</h3>
-                                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Saturação por setores</p>
+                                            <h4 className="text-base font-black text-slate-900 tracking-tight uppercase">Cobertura por Setor / Localidade</h4>
+                                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Saturação por áreas registradas</p>
                                         </div>
-                                        <div className="h-80 w-full text-[9px]">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart data={stats.barData} margin={{ top: 20, right: 0, left: -20, bottom: 5 }}>
-                                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontWeight: 'black', fontSize: 9 }} />
-                                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontWeight: 'black', fontSize: 9 }} />
-                                                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ backgroundColor: '#fff', borderRadius: '16px', border: 'none', boxShadow: '0 20px 40px rgba(0,0,0,0.05)' }} />
-                                                    <Bar dataKey="total" name="Total" fill="#e2e8f0" radius={[4, 4, 0, 0]} />
-                                                    <Bar dataKey="inUse" name="Ativos" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
+                                        {stats.barData.length === 0 ? (
+                                            <div className="text-center py-12 text-slate-400 text-xs font-medium">
+                                                Nenhum setor cadastrado nos territórios ativos.
+                                            </div>
+                                        ) : (
+                                            <div className="divide-y divide-slate-100 max-h-[350px] overflow-y-auto pr-2 no-scrollbar">
+                                                {stats.barData.map((item) => {
+                                                    const pctInUse = item.total ? Math.round((item.inUse / item.total) * 100) : 0;
+                                                    return (
+                                                        <div key={item.name} className="py-3.5 flex flex-col gap-1.5">
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs font-black text-slate-800 truncate pr-2 uppercase tracking-wide">{item.name}</span>
+                                                                <span className="text-xs font-mono text-slate-950 font-bold shrink-0">
+                                                                    {item.inUse} ativos <span className="text-slate-400 font-normal text-[10px]">de {item.total} total ({pctInUse}%)</span>
+                                                                </span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden flex">
+                                                                <div className="bg-blue-500 h-full" style={{ width: `${pctInUse}%` }} />
+                                                                <div className="bg-slate-200 h-full" style={{ width: `${100 - pctInUse}%` }} />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1883,6 +2441,350 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                     </div>
                 </div>
             )}
+
+            {/* INÍCIO DO PAINEL LATERAL DE SOLICITAÇÕES (DRAWER) */}
+            {isRequestsDrawerOpen && (
+                <div className="fixed inset-0 z-[70] overflow-hidden">
+                    {/* Backdrop */}
+                    <div 
+                        className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-300"
+                        onClick={() => setIsRequestsDrawerOpen(false)}
+                    />
+                    
+                    <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+                        {/* Panel */}
+                        <div className="w-screen max-w-md md:max-w-xl bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+                            {/* Drawer Header */}
+                            <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
+                                        🔔 Solicitações de Territórios
+                                    </h2>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                                        Central do Administrador • {filteredRequests.length} itens encontrados
+                                    </p>
+                                </div>
+                                <button 
+                                    onClick={() => setIsRequestsDrawerOpen(false)}
+                                    className="p-1.5 hover:bg-slate-100 rounded-xl transition text-slate-400 hover:text-slate-700 cursor-pointer"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {/* Toolbar (Search, Filter & Sort) */}
+                            <div className="p-5 border-b border-slate-100 bg-white space-y-4">
+                                {/* Search input */}
+                                <div className="relative">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Buscar por publicador, número ou observação..."
+                                        value={requestsSearch}
+                                        onChange={(e) => setRequestsSearch(e.target.value)}
+                                        className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-150 rounded-2xl text-xs font-bold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:bg-white focus:border-slate-200 transition-all text-slate-800"
+                                    />
+                                    <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                                </div>
+
+                                {/* Filters & Sorter Row */}
+                                <div className="flex flex-wrap items-center gap-2 justify-between">
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {[
+                                            { id: 'all', label: 'Tudo' },
+                                            { id: 'pending', label: 'Pendentes' },
+                                            { id: 'approved', label: 'Aprovados' },
+                                            { id: 'rejected', label: 'Recusados' },
+                                            { id: 'completed', label: 'Concluídos' }
+                                        ].map(btn => (
+                                            <button
+                                                key={btn.id}
+                                                onClick={() => setRequestsFilter(btn.id as any)}
+                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${requestsFilter === btn.id ? 'bg-slate-800 text-white shadow-xs' : 'bg-slate-100/70 hover:bg-slate-100 text-slate-500'}`}
+                                            >
+                                                {btn.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <select
+                                        value={requestsSort}
+                                        onChange={(e) => setRequestsSort(e.target.value as any)}
+                                        className="bg-slate-100/70 border-transparent rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest focus:outline-none text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+                                    >
+                                        <option value="newest">Mais Novos</option>
+                                        <option value="oldest">Mais Antigos</option>
+                                        <option value="urgent">Prioridade Urgente</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* List Area */}
+                            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/50 no-scrollbar">
+                                {filteredRequests.length > 0 ? (
+                                    filteredRequests.map(req => {
+                                        const isUrgent = req.urgency === 'high';
+                                        const isMed = req.urgency === 'medium';
+                                        const isHighl = highlightedRequestIds.includes(req.id);
+                                        const dateStr = req.requestDate ? req.requestDate.toLocaleDateString('pt-BR') : '';
+                                        const timeStr = req.requestDate ? req.requestDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+                                        const relativeTime = req.requestDate ? getDaysRemaining(req.requestDate) : 0;
+
+                                        return (
+                                            <div 
+                                                key={req.id} 
+                                                className={`p-5 bg-white border rounded-[20px] shadow-xs relative overflow-hidden transition-all duration-300 flex flex-col justify-between gap-4 group ${isHighl ? 'ring-4 ring-emerald-500/10 border-emerald-500' : 'border-slate-100 hover:border-slate-200'}`}
+                                            >
+                                                {/* Left status bar */}
+                                                <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
+                                                    req.status === RequestStatus.PENDING 
+                                                        ? (isUrgent ? 'bg-red-500' : isMed ? 'bg-amber-500' : 'bg-blue-500')
+                                                        : req.status === RequestStatus.APPROVED ? 'bg-emerald-500'
+                                                        : req.status === RequestStatus.REJECTED ? 'bg-rose-500'
+                                                        : 'bg-slate-400'
+                                                }`} />
+
+                                                {/* Top header line of card */}
+                                                <div className="flex items-start justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-black text-sm uppercase text-slate-600 shrink-0 font-bold">
+                                                            {req.userName?.charAt(0) || ''}
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-extrabold text-slate-800 text-sm leading-tight">{req.userName}</h4>
+                                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 flex items-center gap-1">
+                                                                <Clock className="w-3.5 h-3.5" />
+                                                                {dateStr} às {timeStr} • {relativeTime === 0 ? 'Hoje' : relativeTime > 0 ? `há ${relativeTime} dias` : `há ${Math.abs(relativeTime)} dias`}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Urgency Badge */}
+                                                    {req.status === RequestStatus.PENDING && (
+                                                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                                                            isUrgent ? 'bg-red-50 text-red-700 animate-pulse' : isMed ? 'bg-amber-50 text-amber-700' : 'bg-blue-50/50 text-blue-700'
+                                                        }`}>
+                                                            {req.urgency === 'high' ? 'Urgente' : req.urgency === 'medium' ? 'Média' : 'Baixa'}
+                                                        </span>
+                                                    )}
+
+                                                    {/* Status Badge for Historical items */}
+                                                    {req.status !== RequestStatus.PENDING && (
+                                                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                                                            req.status === RequestStatus.APPROVED ? 'bg-emerald-50 text-emerald-700'
+                                                            : req.status === RequestStatus.REJECTED ? 'bg-rose-50 text-rose-700'
+                                                            : 'bg-slate-50 text-slate-600'
+                                                        }`}>
+                                                            {req.status === RequestStatus.APPROVED ? 'Aprovado'
+                                                            : req.status === RequestStatus.REJECTED ? 'Recusado'
+                                                            : 'Concluído'}
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Discreed Note block */}
+                                                {req.notes && req.notes.trim() !== '' && (
+                                                    <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 flex items-center gap-1">
+                                                            <span>📝 Observações do publicador:</span>
+                                                        </p>
+                                                        <p className="text-xs text-slate-600 font-semibold leading-relaxed whitespace-pre-line">{req.notes}</p>
+                                                    </div>
+                                                )}
+
+                                                {/* Rejection reason or assigned maps display */}
+                                                {req.status === RequestStatus.REJECTED && req.rejectionReason && (
+                                                    <div className="p-3.5 bg-rose-50 border border-rose-100/40 rounded-xl">
+                                                        <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest leading-none mb-1">Motivo da recusa:</p>
+                                                        <p className="text-xs text-rose-700 font-bold leading-relaxed">{req.rejectionReason}</p>
+                                                    </div>
+                                                )}
+
+                                                {req.territoryNames && req.territoryNames.length > 0 && (
+                                                    <div className="p-3.5 bg-emerald-50 border border-emerald-100/40 rounded-xl flex items-center gap-2">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                                        <p className="text-xs text-emerald-800 font-bold">
+                                                            Atribuído: <span className="font-extrabold underline">{req.territoryNames.join(', ')}</span> (Nº {req.territoryNumbers?.join(', ')})
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {/* Action buttons (Only for PENDING status) */}
+                                                {req.status === RequestStatus.PENDING && (
+                                                    <div className="flex items-center gap-2 pt-1.5 border-t border-slate-50 mt-1 justify-end">
+                                                        {/* Refuse */}
+                                                        <button
+                                                            onClick={() => setRequestToReject(req)}
+                                                            className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                                                        >
+                                                            <span>Recusar</span>
+                                                        </button>
+
+                                                        {/* Edit */}
+                                                        <button
+                                                            onClick={() => {
+                                                                setRequestToEdit(req);
+                                                                setEditNotesInput(req.notes || '');
+                                                                setEditUrgencyInput(req.urgency || 'low');
+                                                            }}
+                                                            className="px-3.5 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                                                        >
+                                                            <span>Editar</span>
+                                                        </button>
+
+                                                        {/* Approve (Assign) */}
+                                                        <button
+                                                            onClick={() => {
+                                                                setFulfillingRequestId(req.id);
+                                                                setSelectedMapsForRequest([]);
+                                                                // Highlight the request in drawer
+                                                                setHighlightedRequestIds(prev => [...prev, req.id]);
+                                                                setTimeout(() => {
+                                                                    setHighlightedRequestIds(prev => prev.filter(id => id !== req.id));
+                                                                }, 4000);
+                                                            }}
+                                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-xs hover:shadow transition-all cursor-pointer flex items-center gap-1.5 border border-blue-700"
+                                                        >
+                                                            <span>Atribuir Mapa</span>
+                                                            <ChevronRight className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    <div className="py-24 text-center space-y-3">
+                                        <span className="text-4xl">🎉</span>
+                                        <p className="text-slate-400 font-black text-sm uppercase tracking-widest italic leading-tight">Nenhuma solicitação encontrada</p>
+                                        <p className="text-xs text-slate-300 font-semibold leading-relaxed">Não há novos pedidos para os filtros selecionados.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* FIM DO PAINEL LATERAL DE SOLICITAÇÕES (DRAWER) */}
+
+            {/* MODAL DE JUSTIFICATIVA DE RECUSA */}
+            {requestToReject && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in" onClick={() => setRequestToReject(null)} />
+                    <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-200 flex flex-col border border-slate-100">
+                        <div className="p-7 border-b border-slate-100 flex items-center justify-between bg-rose-50/20">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800 tracking-tight">Recusar Solicitação</h3>
+                                <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest mt-1">Insira uma justificativa (Opcional)</p>
+                            </div>
+                        </div>
+                        <div className="p-7 space-y-4 font-bold">
+                            <p className="text-xs text-slate-500 font-bold leading-normal">
+                                Você está recusando a solicitação de território feita por <span className="font-extrabold text-slate-800">{requestToReject.userName}</span>. Opcionalmente, especifique o motivo abaixo para notificar o publicador.
+                            </p>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-bold">Motivo da Recusa</label>
+                                <textarea
+                                    value={rejectionReasonInput}
+                                    onChange={(e) => setRejectionReasonInput(e.target.value)}
+                                    placeholder="Ex: Todos os territórios já estão em uso. Por favor, solicite novamente mais tarde."
+                                    rows={3}
+                                    className="w-full px-4 py-3 border border-slate-150 rounded-xl text-xs focus:ring-4 focus:ring-rose-500/10 focus:border-rose-500 outline-none transition font-semibold"
+                                />
+                            </div>
+                        </div>
+                        <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-3 font-bold">
+                            <button
+                                onClick={() => { setRequestToReject(null); setRejectionReasonInput(''); }}
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded-xl font-bold cursor-pointer transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    await handleRejectRequestWithReason(requestToReject.id, rejectionReasonInput);
+                                    setRequestToReject(null);
+                                    setRejectionReasonInput('');
+                                }}
+                                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs rounded-xl font-bold cursor-pointer shadow-sm border border-rose-700 transition-all active:scale-95"
+                            >
+                                Confirmar Recusa
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE EDIÇÃO DE SOLICITAÇÃO */}
+            {requestToEdit && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in" onClick={() => setRequestToEdit(null)} />
+                    <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-200 flex flex-col border border-slate-100">
+                        <div className="p-7 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800 tracking-tight">Editar Solicitação</h3>
+                                <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">Alterar anotações ou prioridade do pedido</p>
+                            </div>
+                        </div>
+                        <div className="p-7 space-y-4 font-bold">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-bold">Anotações do Publicador</label>
+                                <textarea
+                                    value={editNotesInput}
+                                    onChange={(e) => setEditNotesInput(e.target.value)}
+                                    placeholder="Editar anotações..."
+                                    rows={3}
+                                    className="w-full px-4 py-3 border border-slate-150 rounded-xl text-xs focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition font-semibold"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-bold">Nível de Urgência</label>
+                                <select
+                                    value={editUrgencyInput}
+                                    onChange={(e) => setEditUrgencyInput(e.target.value as any)}
+                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-150 rounded-xl text-xs focus:ring-4 focus:ring-blue-500/10 outline-none transition font-extrabold"
+                                >
+                                    <option value="low">Baixa prioridade</option>
+                                    <option value="medium">Média prioridade</option>
+                                    <option value="high">Urgência alta</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-3 font-bold">
+                            <button
+                                onClick={() => setRequestToEdit(null)}
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded-xl font-bold cursor-pointer transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    await handleEditRequest(requestToEdit.id, editNotesInput, editUrgencyInput);
+                                }}
+                                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-xl font-bold cursor-pointer shadow-sm border border-blue-700 transition-all active:scale-95"
+                            >
+                                Salvar Alterações
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* DYNAMIC CONFIRMATION TOASTS CONTAINER */}
+            <div className="fixed bottom-6 right-6 z-[99] flex flex-col gap-2.5 max-w-sm pointer-events-none">
+                {toasts.map(t => (
+                    <div 
+                        key={t.id} 
+                        className={`p-4 rounded-2xl shadow-xl flex items-center gap-3 border pointer-events-auto animate-in slide-in-from-bottom-5 duration-300 ${
+                            t.type === 'success' ? 'bg-emerald-800 border-emerald-900 text-white' :
+                            t.type === 'error' ? 'bg-rose-800 border-rose-900 text-white' :
+                            'bg-slate-800 border-slate-950 text-white'
+                        }`}
+                    >
+                        <span className="text-base">{t.type === 'success' ? '✅' : t.type === 'error' ? '❌' : 'ℹ️'}</span>
+                        <p className="text-xs font-bold leading-tight">{t.message}</p>
+                    </div>
+                ))}
+            </div>
             </div>
         </div>
     );

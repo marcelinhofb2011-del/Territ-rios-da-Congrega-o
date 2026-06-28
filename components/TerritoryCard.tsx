@@ -1,5 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Territory } from '../types';
+import { 
+    MapPin, 
+    User, 
+    Clock, 
+    ExternalLink, 
+    MoreHorizontal, 
+    Edit, 
+    CheckCircle, 
+    RotateCcw, 
+    Trash2, 
+    Calendar,
+    Coffee,
+    ChevronRight,
+    Map
+} from 'lucide-react';
 
 interface TerritoryCardProps {
     territory: Territory;
@@ -11,6 +26,8 @@ interface TerritoryCardProps {
 }
 
 const TerritoryCard: React.FC<TerritoryCardProps> = ({ territory, onEdit, onReset, onComplete, onDelete, onViewMap }) => {
+    const [showMenu, setShowMenu] = useState(false);
+
     const parseDateLocal = (d: any): Date | null => {
         if (!d) return null;
         if (d instanceof Date) return d;
@@ -40,10 +57,16 @@ const TerritoryCard: React.FC<TerritoryCardProps> = ({ territory, onEdit, onRese
     };
 
     const getStatusColor = () => {
-        if (territory.status === 'em_uso' || territory.status === 'in_use') return 'bg-blue-50 text-blue-600 border-blue-100';
-        if (territory.status === 'disponivel' || territory.status === 'available') return 'bg-emerald-50 text-emerald-600 border-emerald-100';
-        if (territory.status === 'descanso' || territory.status === 'resting') return 'bg-amber-50 text-amber-600 border-amber-100';
-        return 'bg-slate-50 text-slate-500 border-slate-100';
+        if (territory.status === 'em_uso' || territory.status === 'in_use') {
+            return 'bg-purple-50 text-purple-700 border-purple-150';
+        }
+        if (territory.status === 'disponivel' || territory.status === 'available') {
+            return 'bg-emerald-50 text-emerald-700 border-emerald-150';
+        }
+        if (territory.status === 'descanso' || territory.status === 'resting') {
+            return 'bg-amber-50 text-amber-700 border-amber-150';
+        }
+        return 'bg-slate-50 text-slate-500 border-slate-150';
     };
 
     const getStatusLabel = () => {
@@ -58,96 +81,146 @@ const TerritoryCard: React.FC<TerritoryCardProps> = ({ territory, onEdit, onRese
     const isResting = territory.status === 'descanso' || territory.status === 'resting';
 
     return (
-        <div className="group p-5 bg-white border border-gray-200 rounded shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between gap-4 relative">
-            <div className="flex items-start justify-between gap-4">
+        <div className="group p-6 bg-white border border-slate-100 rounded-[20px] shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between gap-5 relative overflow-hidden">
+            {/* Soft decorative background effect */}
+            <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 rounded-full blur-2xl -mr-8 -mt-8 opacity-40 transition-all group-hover:scale-125" />
+
+            <div className="flex items-start justify-between gap-4 relative z-10">
                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded bg-gray-800 text-white flex items-center justify-center font-bold text-xl shadow-sm transition-all group-hover:bg-blue-600">
+                    {/* Territory Number Identifier */}
+                    <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-extrabold text-lg shadow-sm transition-all duration-300 group-hover:bg-blue-600 group-hover:scale-105">
                         {territory.number || 'S/N'}
                     </div>
                     <div className="min-w-0">
-                        <h3 className="font-bold text-gray-800 text-base leading-tight truncate">{territory.name}</h3>
-                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mt-1 truncate">{territory.locality}</p>
+                        <h3 className="font-extrabold text-slate-800 text-base leading-tight truncate group-hover:text-blue-600 transition-colors">
+                            {territory.name}
+                        </h3>
+                        <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mt-1.5 truncate flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                            {territory.locality}
+                        </p>
                     </div>
                 </div>
+                
+                {/* Status indicator badge */}
                 <div className="flex flex-col items-end gap-1.5">
-                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-semibold border ${getStatusColor()}`}>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${getStatusColor()}`}>
                         {getStatusLabel()}
                     </span>
                     {isAvailable && (
-                        <p className="text-[9px] text-gray-400 font-medium">Última saída: {formatDate(territory.lastCompletedDate)}</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                            Saída: {formatDate(territory.lastCompletedDate)}
+                        </p>
                     )}
                 </div>
             </div>
 
-            <div className="space-y-2">
+            {/* Dynamic Status-Specific Info Area */}
+            <div className="relative z-10 flex-1">
                 {isInUse && territory.assignedTo && (
-                    <div className="flex items-center gap-3 p-2 bg-blue-50/50 border border-blue-100 rounded">
-                        <div className="w-6 h-6 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                    <div className="flex items-center gap-3.5 p-3.5 bg-purple-50/30 border border-purple-100/50 rounded-2xl animate-in fade-in duration-200">
+                        <div className="w-8.5 h-8.5 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
                             {territory.assignedToName?.charAt(0).toUpperCase()}
                         </div>
-                        <div className="min-w-0">
-                            <p className="font-bold text-gray-800 text-xs truncate">{territory.assignedToName}</p>
-                            <p className="text-[9px] text-red-700 font-semibold uppercase tracking-wider mt-0.5">Devolver até {formatDate(territory.dueDate)}</p>
+                        <div className="min-w-0 flex-1">
+                            <p className="font-black text-slate-800 text-xs truncate">{territory.assignedToName}</p>
+                            <p className="text-[9px] text-red-600 font-extrabold uppercase tracking-widest mt-1 flex items-center gap-1 leading-none">
+                                <Clock className="w-3 h-3 shrink-0 text-red-500" />
+                                Devolver: {formatDate(territory.dueDate)}
+                            </p>
                         </div>
                     </div>
                 )}
 
                 {isResting && (
-                    <div className="p-3 bg-amber-50/40 border border-amber-100 rounded space-y-1.5 text-xs text-amber-900">
-                        <div className="flex justify-between items-center gap-2">
-                            <span className="font-medium text-amber-700">Última saída:</span>
-                            <span className="font-bold">{formatDate(territory.returnedAt || territory.lastCompletedDate)}</span>
+                    <div className="p-3.5 bg-amber-50/20 border border-amber-100/60 rounded-2xl space-y-2 text-xs text-amber-900 animate-in fade-in duration-200">
+                        <div className="flex justify-between items-center gap-2 text-[10px] font-bold">
+                            <span className="text-amber-600 uppercase tracking-wider flex items-center gap-1">
+                                <Calendar className="w-3 h-3" /> Conclusão
+                            </span>
+                            <span className="font-extrabold text-slate-700">{formatDate(territory.returnedAt || territory.lastCompletedDate)}</span>
                         </div>
-                        <div className="flex justify-between items-center gap-2">
-                            <span className="font-medium text-amber-700">Disponível em:</span>
-                            <span className="font-bold">{formatDate(territory.availableAt)}</span>
+                        <div className="flex justify-between items-center gap-2 text-[10px] font-bold">
+                            <span className="text-amber-600 uppercase tracking-wider flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> Liberação
+                            </span>
+                            <span className="font-extrabold text-slate-700">{formatDate(territory.availableAt)}</span>
                         </div>
-                        <div className="flex justify-between items-center gap-2 text-xs border-t border-amber-100/50 pt-1.5 font-bold">
-                            <span className="text-amber-700">Dias restantes:</span>
-                            <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px]">{getDaysRemaining(territory.availableAt)} dias</span>
+                        <div className="flex justify-between items-center gap-2 text-[10px] border-t border-amber-100/40 pt-2 font-bold mt-1">
+                            <span className="text-amber-700 uppercase tracking-wider flex items-center gap-1">
+                                <Coffee className="w-3 h-3 text-amber-500" /> Repouso
+                            </span>
+                            <span className="bg-amber-100/60 text-amber-850 px-2 py-0.5 rounded-full font-black text-[9px] uppercase tracking-wider">
+                                {getDaysRemaining(territory.availableAt)} dias
+                            </span>
                         </div>
                     </div>
                 )}
             </div>
 
-            <div className="flex items-center justify-between gap-4 pt-1 border-t border-gray-150">
+            {/* Bottom Actions with Ripple effect & Lucide Icons */}
+            <div className="flex items-center justify-between gap-4 pt-3.5 border-t border-slate-55 relative z-10">
                 <button 
                     onClick={() => onViewMap(territory)} 
-                    className="py-1.5 text-blue-600 hover:text-blue-700 font-bold text-xs flex items-center gap-1 transition-all"
+                    className="py-2 px-3 text-blue-600 hover:text-blue-700 font-extrabold text-xs flex items-center gap-1.5 transition-all bg-blue-50/40 hover:bg-blue-50 active:scale-95 rounded-xl cursor-pointer"
                 >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    Acessar Mapa
+                    <Map className="w-3.5 h-3.5" />
+                    <span>Acessar Mapa</span>
                 </button>
-                <div className="relative group/menu">
-                    <button className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-700 transition-all">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" /></svg>
+                
+                {/* Micro Action Dropdown */}
+                <div className="relative">
+                    <button 
+                        onClick={() => setShowMenu(!showMenu)}
+                        className="p-2 hover:bg-slate-50 border border-slate-100 rounded-xl text-slate-400 hover:text-slate-700 transition-all cursor-pointer"
+                        aria-label="Mais opções"
+                    >
+                        <MoreHorizontal className="w-4 h-4" />
                     </button>
-                    <div className="absolute bottom-full right-0 mb-2 w-48 bg-white rounded border border-gray-200 shadow-lg z-50 p-1.5 hidden group-hover/menu:block animate-in fade-in @slide-in-from-bottom-2 origin-bottom-right">
-                        <div className="px-2.5 py-1.5 text-[9px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 mb-1">
-                            Ações
-                        </div>
-                        <button onClick={() => onEdit(territory)} className="w-full text-left px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 rounded flex items-center gap-2 transition-colors">
-                            <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                            Editar Detalhes
-                        </button>
-                        {isInUse && (
-                            <>
-                                <button onClick={() => onComplete(territory)} className="w-full text-left px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 rounded flex items-center gap-2 transition-colors">
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
-                                    Concluir Mapa
+                    
+                    {showMenu && (
+                        <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                            <div className="absolute bottom-full right-0 mb-2 w-48 bg-white rounded-2xl border border-slate-100 shadow-xl z-50 p-2 animate-in fade-in slide-in-from-bottom-2 origin-bottom-right">
+                                <div className="px-2.5 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1.5">
+                                    Ações Administrativas
+                                </div>
+                                <button 
+                                    onClick={() => { onEdit(territory); setShowMenu(false); }} 
+                                    className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+                                >
+                                    <Edit className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>Editar Mapa</span>
                                 </button>
-                                <button onClick={() => onReset(territory)} className="w-full text-left px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-50 rounded flex items-center gap-2 transition-colors">
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                    Estornar Mapa
+                                {isInUse && (
+                                    <>
+                                        <button 
+                                            onClick={() => { onComplete(territory); setShowMenu(false); }} 
+                                            className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+                                        >
+                                            <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                            <span>Concluir Mapa</span>
+                                        </button>
+                                        <button 
+                                            onClick={() => { onReset(territory); setShowMenu(false); }} 
+                                            className="w-full text-left px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+                                        >
+                                            <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
+                                            <span>Estornar Mapa</span>
+                                        </button>
+                                    </>
+                                )}
+                                <div className="h-px bg-slate-50 my-1.5"></div>
+                                <button 
+                                    onClick={() => { onDelete(territory); setShowMenu(false); }} 
+                                    className="w-full text-left px-3 py-2 text-xs font-bold text-red-650 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5 text-red-550" />
+                                    <span>Excluir Mapa</span>
                                 </button>
-                            </>
-                        )}
-                        <div className="h-px bg-gray-100 my-1"></div>
-                        <button onClick={() => onDelete(territory)} className="w-full text-left px-2.5 py-1.5 text-[11px] font-semibold text-red-650 hover:bg-red-50 rounded flex items-center gap-2 transition-colors">
-                            <svg className="w-3.5 h-3.5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                            Excluir Registro
-                        </button>
-                    </div>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

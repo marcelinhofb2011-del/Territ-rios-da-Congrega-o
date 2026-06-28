@@ -10,6 +10,7 @@ export enum RequestStatus {
   PENDING = 'pendente',
   APPROVED = 'aprovado',
   REJECTED = 'rejeitado',
+  COMPLETED = 'finalizado',
 }
 
 export interface User {
@@ -61,6 +62,12 @@ export interface TerritoryRequest {
   userName: string;
   requestDate: Date;
   status: RequestStatus;
+  territoryIds?: string[];
+  territoryNames?: string[];
+  territoryNumbers?: string[];
+  rejectionReason?: string;
+  notes?: string;
+  urgency?: 'low' | 'medium' | 'high';
 }
 
 export interface AppNotification {
