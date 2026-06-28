@@ -148,6 +148,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
     const [manualAssignUserId, setManualAssignUserId] = useState<string | undefined>(undefined);
     const [editingAssignment, setEditingAssignment] = useState<Territory | null>(null);
     const [showSuperintendentModal, setShowSuperintendentModal] = useState(false);
+    const [showAboutModal, setShowAboutModal] = useState(false);
+
+    const handleBackupDownload = () => {
+        try {
+            const backupData = {
+                exportedAt: new Date().toISOString(),
+                systemVersion: '1.4.2',
+                congregation: 'Congregação Principal',
+                territories: territories || [],
+                requests: requests || [],
+                campaigns: campaigns || [],
+                globalHistory: globalHistory || []
+            };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            const dateString = new Date().toISOString().split('T')[0];
+            downloadAnchor.setAttribute("download", `territorios_backup_${dateString}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast('Backup do sistema gerado e baixado com sucesso!', 'success');
+        } catch (err: any) {
+            console.error(err);
+            showToast('Erro ao gerar backup: ' + err.message, 'error');
+        }
+    };
+
     const [confirmAction, setConfirmAction] = useState<{
         title: string;
         message: string;
@@ -302,13 +330,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
     // Listeners for realtime data
     useEffect(() => {
         const handleOpenSidebar = () => setIsSidebarOpen(true);
+        const handleOpenAbout = () => setShowAboutModal(true);
+        const handleTriggerBackup = () => handleBackupDownload();
+        
         window.addEventListener('open-admin-sidebar', handleOpenSidebar);
-        return () => window.removeEventListener('open-admin-sidebar', handleOpenSidebar);
-    }, []);
+        window.addEventListener('open-about-modal', handleOpenAbout);
+        window.addEventListener('trigger-backup-download', handleTriggerBackup);
+        
+        return () => {
+            window.removeEventListener('open-admin-sidebar', handleOpenSidebar);
+            window.removeEventListener('open-about-modal', handleOpenAbout);
+            window.removeEventListener('trigger-backup-download', handleTriggerBackup);
+        };
+    }, [territories, requests, campaigns, globalHistory]);
 
     // Prevent body scroll when sidebar or modals are active
     useEffect(() => {
-        const shouldLock = isSidebarOpen || showAddModal || !!editingTerritory || showManualAssignModal || !!editingAssignment || !!viewHistory || !!viewingMap || !!fulfillingRequestId || showAddCampaignModal || showSuperintendentModal;
+        const shouldLock = isSidebarOpen || showAddModal || !!editingTerritory || showManualAssignModal || !!editingAssignment || !!viewHistory || !!viewingMap || !!fulfillingRequestId || showAddCampaignModal || showSuperintendentModal || showAboutModal;
         if (shouldLock) {
             document.body.style.overflow = 'hidden';
         } else {
@@ -317,7 +355,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
         return () => {
             document.body.style.overflow = '';
         };
-    }, [isSidebarOpen, showAddModal, editingTerritory, showManualAssignModal, editingAssignment, viewHistory, viewingMap, fulfillingRequestId, showAddCampaignModal, showSuperintendentModal]);
+    }, [isSidebarOpen, showAddModal, editingTerritory, showManualAssignModal, editingAssignment, viewHistory, viewingMap, fulfillingRequestId, showAddCampaignModal, showSuperintendentModal, showAboutModal]);
 
     useEffect(() => {
         if (!user) return;
@@ -887,6 +925,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                 onClose={() => setIsSidebarOpen(false)}
                 onAddTerritory={() => setShowAddModal(true)}
                 onManualAssign={() => setShowManualAssignModal(true)}
+                onOpenS13={() => setShowSuperintendentModal(true)}
+                onOpenAbout={() => setShowAboutModal(true)}
+                onTriggerBackup={handleBackupDownload}
             />
 
             <div className="flex-1 flex flex-col min-w-0 min-h-[calc(100vh-64px)] bg-gray-100 overflow-y-auto no-scrollbar">
@@ -2341,6 +2382,54 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                                 </div>
                             </div>
                         )}
+
+                        {activeTab === 'settings' && (
+                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                <div className="bg-white p-8 rounded-3xl border border-gray-150 shadow-sm space-y-6">
+                                    <div>
+                                        <h2 className="text-lg font-black text-slate-800 tracking-tight">⚙️ Configurações do Painel</h2>
+                                        <p className="text-xs text-slate-400 mt-1">Configure parâmetros do sistema, detalhes de congregação e cópias de segurança.</p>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100 font-bold">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-bold">Nome da Congregação</label>
+                                            <input 
+                                                type="text" 
+                                                defaultValue="Congregação Principal" 
+                                                disabled
+                                                className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-2xl text-xs text-slate-500 font-bold outline-none cursor-not-allowed"
+                                            />
+                                            <p className="text-[9px] text-slate-400 font-medium leading-normal mt-1">O nome oficial da congregação é integrado e sincronizado de forma centralizada pelo administrador principal.</p>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-bold">Idioma Padrão</label>
+                                            <select 
+                                                disabled
+                                                className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-2xl text-xs text-slate-500 font-bold outline-none cursor-not-allowed"
+                                            >
+                                                <option>Português (Brasil)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-6 bg-slate-50/50 rounded-2xl border border-gray-150 flex flex-col sm:flex-row items-center justify-between gap-4 font-bold">
+                                        <div className="space-y-1 text-center sm:text-left">
+                                            <h4 className="text-sm font-black text-slate-800">Cópia de Segurança (Backup do Sistema)</h4>
+                                            <p className="text-xs text-slate-400 font-semibold leading-relaxed">Gere e baixe uma cópia criptografada e estruturada de todos os dados de territórios, campanhas, solicitações e histórico.</p>
+                                        </div>
+                                        <button 
+                                            onClick={handleBackupDownload}
+                                            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-950 text-white font-extrabold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-2 animate-pulse"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                            <span>Baixar Cópia (.json)</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                 </div>
 
             {showAddCampaignModal && (
@@ -2768,6 +2857,99 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ activeTab: propActiveTa
                     </div>
                 </div>
             )}
+
+            {showAboutModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-150">
+                        <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex items-center justify-between font-bold">
+                            <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider">
+                                Sobre o Sistema
+                            </h3>
+                            <button 
+                                onClick={() => setShowAboutModal(false)}
+                                className="text-gray-400 hover:text-slate-800 p-1.5 hover:bg-gray-100 rounded-lg transition"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4 text-center font-bold">
+                            <div className="w-16 h-16 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-md shadow-blue-500/20 mx-auto">
+                                T
+                            </div>
+                            <div className="space-y-1">
+                                <h4 className="text-base font-black text-slate-800">Territórios</h4>
+                                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Sistema de Gestão Congregacional</p>
+                            </div>
+                            <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                                Uma plataforma completa de nível profissional desenvolvida para gerenciamento inteligente de territórios de pregação, controle de prazos de cartões, atribuições para publicadores e relatórios automatizados de S-13.
+                            </p>
+                            <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-4 text-left font-bold">
+                                <div>
+                                    <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Versão do App</p>
+                                    <p className="text-xs font-bold text-slate-800">1.4.2</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Ambiente</p>
+                                    <p className="text-xs font-bold text-slate-800">Produção Cloud</p>
+                                </div>
+                            </div>
+                            <p className="text-[9px] text-slate-400 font-medium">© 2026 Ministério de Campo. Todos os direitos reservados.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Custom Admin Bottom Navigation for Mobile */}
+            <div className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-100 flex items-center justify-around z-40 lg:hidden shadow-[0_-4px_12px_rgba(0,0,0,0.03)] pb-safe font-bold">
+                <button 
+                    onClick={() => setActiveTab('dashboard')}
+                    className={`flex flex-col items-center justify-center gap-1 w-14 h-full relative cursor-pointer ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-400'}`}
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                    <span className="text-[9px] font-bold">Início</span>
+                    {activeTab === 'dashboard' && <div className="absolute top-0 w-8 h-0.5 bg-blue-600 rounded-full" />}
+                </button>
+
+                <button 
+                    onClick={() => setActiveTab('available')}
+                    className={`flex flex-col items-center justify-center gap-1 w-14 h-full relative cursor-pointer ${(activeTab === 'available' || activeTab === 'in_use' || activeTab === 'resting') ? 'text-blue-600' : 'text-slate-400'}`}
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+                    <span className="text-[9px] font-bold">Territórios</span>
+                    {(activeTab === 'available' || activeTab === 'in_use' || activeTab === 'resting') && <div className="absolute top-0 w-8 h-0.5 bg-blue-600 rounded-full" />}
+                </button>
+
+                <button 
+                    onClick={() => setIsRequestsDrawerOpen(true)}
+                    className={`flex flex-col items-center justify-center gap-1 w-14 h-full relative cursor-pointer ${isRequestsDrawerOpen ? 'text-blue-600' : 'text-slate-400'}`}
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                    <span className="text-[9px] font-bold">Solicitações</span>
+                    {requests.length > 0 && (
+                        <span className="absolute top-2.5 right-2 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white animate-pulse">
+                            {requests.length}
+                        </span>
+                    )}
+                    {isRequestsDrawerOpen && <div className="absolute top-0 w-8 h-0.5 bg-blue-600 rounded-full" />}
+                </button>
+
+                <button 
+                    onClick={() => setActiveTab('users')}
+                    className={`flex flex-col items-center justify-center gap-1 w-14 h-full relative cursor-pointer ${activeTab === 'users' ? 'text-blue-600' : 'text-slate-400'}`}
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    <span className="text-[9px] font-bold">Publicadores</span>
+                    {activeTab === 'users' && <div className="absolute top-0 w-8 h-0.5 bg-blue-600 rounded-full" />}
+                </button>
+
+                <button 
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="flex flex-col items-center justify-center gap-1 w-14 h-full relative cursor-pointer text-slate-400 animate-pulse"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                    <span className="text-[9px] font-bold">Mais</span>
+                </button>
+            </div>
 
             {/* DYNAMIC CONFIRMATION TOASTS CONTAINER */}
             <div className="fixed bottom-6 right-6 z-[99] flex flex-col gap-2.5 max-w-sm pointer-events-none">
