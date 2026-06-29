@@ -1,10 +1,10 @@
 
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { User } from '../types';
-import { apiLogin, apiLogout, apiSignUp, apiResetPassword, getOrCreateUserProfile, apiLoginWithGoogle } from '../services/api';
+import { apiLogin, apiLogout, apiSignUp, apiResetPassword, getOrCreateUserProfile, apiLoginWithGoogle, parseDate } from '../services/api';
 import { auth, db } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 
 interface AuthContextType {
   user: User | null;
@@ -24,9 +24,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     console.log("AuthContext: Setting up onAuthStateChanged listener");
+    let unsubscribeProfileSnapshot: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("AuthContext: onAuthStateChanged fired", firebaseUser ? "User exists" : "No user");
       
+      if (unsubscribeProfileSnapshot) {
+        unsubscribeProfileSnapshot();
+        unsubscribeProfileSnapshot = null;
+      }
+
       if (firebaseUser) {
         setLoading(true);
         // Timeout de 15 segundos para evitar travamento infinito
@@ -40,11 +47,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const loggedUser = await getOrCreateUserProfile(firebaseUser);
           console.log("AuthContext: User profile fetched", loggedUser);
           setUser(loggedUser);
+          clearTimeout(timeoutId);
+          setLoading(false);
+
+          // Escuta alterações em tempo real do perfil do usuário no Firestore
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          unsubscribeProfileSnapshot = onSnapshot(userRef, (snapshot) => {
+            if (snapshot.exists()) {
+              const data = snapshot.data();
+              console.log("AuthContext: User profile updated in real-time", data);
+              setUser((prevUser) => {
+                if (!prevUser) return { ...data, id: snapshot.id } as User;
+                return {
+                  ...prevUser,
+                  ...data,
+                  id: snapshot.id,
+                  createdAt: parseDate(data.createdAt) || prevUser.createdAt
+                } as User;
+              });
+            }
+          }, (err) => {
+            console.error("Erro no listener em tempo real do perfil do usuário:", err);
+          });
+
         } catch (error) {
           console.error("Erro crítico ao carregar perfil:", error);
-        } finally {
           clearTimeout(timeoutId);
-          console.log("AuthContext: Setting loading to false (user exists)");
           setLoading(false);
         }
       } else {
@@ -54,7 +82,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeProfileSnapshot) {
+        unsubscribeProfileSnapshot();
+      }
+    };
   }, []);
 
   const login = async (email: string, pass: string) => {

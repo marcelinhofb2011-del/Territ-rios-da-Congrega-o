@@ -691,7 +691,31 @@ export const fetchAllUsers = async (): Promise<User[]> => {
 
 export const updateUserRole = async (userId: string, role: 'admin' | 'user'): Promise<void> => {
     try {
-        await updateDoc(doc(db, 'users', userId), { role });
+        // 1. Obter o documento do usuário atual para descobrir seu email e garantir a consistência
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        
+        if (userSnap.exists()) {
+            const userData = userSnap.data();
+            const email = userData.email?.toLowerCase();
+            
+            if (email) {
+                // 2. Buscar TODOS os documentos de usuário com o mesmo email para evitar problemas de duplicidade ou registros órfãos
+                const q = query(collection(db, 'users'), where('email', '==', email));
+                const snap = await getDocs(q);
+                
+                // 3. Atualizar todos os documentos encontrados para o novo cargo
+                const promises = snap.docs.map(docSnap => 
+                    updateDoc(doc(db, 'users', docSnap.id), { role })
+                );
+                await Promise.all(promises);
+                console.log(`Sucesso: atualizada a role para '${role}' em todos os documentos (${promises.length}) com o email ${email}`);
+                return;
+            }
+        }
+        
+        // Fallback caso não encontre o documento principal ou não tenha email associado
+        await updateDoc(userRef, { role });
     } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
     }
