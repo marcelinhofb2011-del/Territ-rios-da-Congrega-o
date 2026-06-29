@@ -143,8 +143,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         {
             title: 'Administração',
             items: [
-                { id: 'users-list', label: 'Usuários', icon: Users, action: () => { setActiveTab('users'); onClose(); } },
-                { id: 'users-permissions', label: 'Permissões', icon: ShieldCheck, action: () => { setActiveTab('users'); onClose(); } },
                 { id: 'settings', label: 'Configurações', icon: Settings },
                 { id: 'backup', label: 'Backup', icon: Database, action: handleTriggerBackup },
                 { id: 'about', label: 'Sobre', icon: Info, action: handleOpenAbout }
